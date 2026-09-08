@@ -70,6 +70,27 @@ Anmeldung nach einer Neuinstallation von selbst.
    diesem Trigger und beim Dienststart wird die Netzwerkverbindung zusätzlich aktiv
    geprüft (nicht nur der zuletzt gemeldete Event-Zustand).
 
+## Verhalten bei Netzwechsel während laufender Sicherung
+
+Wechselt die WLAN-SSID während einer aktiven Sicherung ins Verbotene oder
+entfällt die Verbindung ganz (z. B. Wechsel vom erlaubten Netz zum
+Handy-Hotspot), stoppt `urbackup-gated` sofort — nicht erst nach Ende der
+laufenden Sicherung. Reine Sicherheitsfrage fürs mobile Datenvolumen: Eine
+100-GB-Sicherung „zu Ende laufen zu lassen" könnte das Datenlimit im Zweifel
+ohnehin selbst erschöpfen, bevor sie fertig ist.
+
+„Sofort stoppen" heißt hier `systemctl stop urbackupclientbackend.service` —
+das ist kein Abwürgen, sondern ein geordnetes Stoppen des Dienstes. Eine
+feinere, clientseitige Möglichkeit, nur den laufenden Sicherungsjob gezielt
+abzubrechen, gibt es ohnehin nicht: `urbackupclientctl` kennt ausschließlich
+`start`, `status`, `browse`, `restore-start`, `set-settings`, `reset-keep`,
+`add-backupdir`, `list-backupdirs`, `remove-backupdir` — kein `stop`/`abort`/
+`pause` (verifiziert per `--help`). Der Dienst-Stopp ist damit nicht nur die
+gewählte, sondern die einzige clientseitig überhaupt vorhandene Option.
+UrBackup nimmt eine so unterbrochene Sicherung später von selbst wieder auf,
+wie wir bei der Fehlersuche am eigentlichen UrBackup-Client mehrfach
+beobachtet haben.
+
 ## Zustand und Merken zwischen Aufrufen
 
 Vorschlag zur Diskussion, abweichend von der ursprünglichen Idee (UUID-Datei unter
@@ -91,8 +112,67 @@ zufällige UUID-Datei, die man beim Fehlersuchen erst wiederfinden müsste.
 - Anzeigedauer 5 Sekunden, konfigurierbar.
 
 Datenquelle für Serververbindung/Sicherungsfortschritt: `urbackupclientctl status`
-(JSON-Ausgabe). Die relevanten Felder: `internet_connected`, `servers[]`,
-`running_processes[]` (darin u. a. `percent_done`, `eta_ms`).
+(JSON-Ausgabe). Die relevanten Felder, alle im Quellcode verifiziert
+(`urbackupclient/ClientServiceCMD.cpp`, `urbackupserver/FileBackup.cpp`,
+`urbackupclient/InternetClient.cpp`):
+
+- `action` — Klartext-Kürzel des laufenden Vorgangs (`INCR`, `FULL`, `FULLI`,
+  `INCRI`, `R_INCR`, `R_FULL`, `RESTORE_IMAGE`, `RESTORE_FILES`).
+- `total_bytes`/`done_bytes` — vom Server durchgereichte Zählerstände, nicht
+  clientseitig berechnet.
+- `speed_bpms` — ebenfalls vom Server durchgereicht, aber **kein** Mittelwert
+  über den ganzen Lauf: gleitendes Fenster von gut 10 Sekunden
+  (`calculateDownloadSpeed`, Neuberechnung nur wenn `ctime - speed_set_time >
+  10000` ms).
+- `time_since_last_lan_connection` — Millisekunden seit dem letzten reinen
+  LAN-Kontakt (`InternetClient::hasLANConnection()`, wird ausdrücklich nur bei
+  `!internet_conn` aufgerufen). Für XPS-Linux im Internet-Modus **nicht**
+  als Verbindungsindikator brauchbar, da Internet-Modus-Kontakte diesen Wert
+  nie zurücksetzen. Für „ist überhaupt eine Serververbindung da" sind
+  `internet_connected` und `servers[]` die richtigen Felder.
+- `server_status_id` — reine, vom Server vergebene Kennnummer zur
+  Job-Zuordnung, ohne eigene inhaltliche Bedeutung.
+
+### Klickbare Notification mit Detailanzeige
+
+Live getestet (Skript `notify_click_test.py`, danach entfernt) und
+bestätigt funktionsfähig: `notify-send -A "default=..." -A "details=..."`
+zeigt auf diesem Desktop tatsächlich einen klickbaren Button, und die
+gewählte Aktion kommt als Text auf stdout beim aufrufenden Prozess an — ganz
+ohne eigene D-Bus-Anbindung. Klickt man auf „Details", öffnet derselbe
+Prozess im Anschluss `zenity --info`/`--text-info` mit dem vollständigen
+`urbackupclientctl status`. Es gibt keine unabhängige Verbindung zwischen
+Notify-Klick und Zenity — der aufrufende Prozess blockiert (`--action`
+impliziert `--wait`), bekommt die Klick-Antwort direkt zurück und entscheidet
+im selben Ablauf, ob er Zenity startet.
+
+Konsequenz für die Umsetzung: Da dieser Aufruf blockiert, darf er nicht in
+der Haupt-Schleife des Dienstes laufen (sonst steht die 30-Sekunden-Prüfung
+still, solange eine Notification unbeantwortet auf dem Bildschirm hängt) —
+er muss in einem eigenen Thread/Hintergrundprozess erfolgen.
+
+Die ursprüngliche Sorge, ein klickbarer Button könnte die gewünschten 5
+Sekunden Anzeigedauer unterlaufen, hat sich als unbegründet erwiesen: Live
+beobachtet läuft die Anzeigedauer normal ab; sie pausiert nur, solange der
+Mauszeiger über der Notification steht (verbreitetes, gewolltes Verhalten
+vieler Notification-Server, kein UrBackup-gated-spezifisches Problem).
+
+**Gedankenoption, nicht entschieden:** Ein bereits offenes Zenity-Textfenster
+(`zenity --text-info --auto-scroll`, gefüttert über eine offen gehaltene
+stdin-Pipe) lässt sich laufend mit neuem Text aktualisieren und bleibt dabei
+dasselbe Fenster — live getestet und bestätigt (`--auto-scroll`: „Nur wenn
+Text von Standardeingabe aufgenommen wird", `zenity --help-text-info`).
+Damit wäre eine dauerhaft offene, sich selbst aktualisierende Statusanzeige
+technisch möglich. Ob das gewollt ist, ist offen — bisher nur als Idee
+festgehalten.
+
+**Systemintegration bestätigt:** Der komplette Ablauf (Notification mit
+Button → Klick-Erkennung → Zenity-Fenster mit Live-Update) funktioniert
+nachweislich unverändert, wenn er nicht interaktiv im Terminal, sondern aus
+einem echten `systemd --user`-Dienst heraus gestartet wird (Testaufbau:
+`urbackup-gated-test.service`, danach entfernt) — die Sorge, ein
+`systemd --user`-Dienst könnte die Desktop-Umgebung (Anzeige/D-Bus) nicht
+erben, hat sich für dieses System nicht bestätigt.
 
 ## Konfiguration
 
