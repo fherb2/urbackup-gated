@@ -2,29 +2,6 @@
 
 1. Offene Punkte klären:
 
-   - **Startreihenfolge/Alleinzuständigkeit.** Damit der eigentliche
-     `urbackupclientbackend`-Dienst nicht kurz vor `urbackup-gated` hochkommt
-     und dann sofort wieder gestoppt wird (kurzes Flackern beim Boot), sollte
-     `urbackupclientbackend.service` selbst aus dem automatischen
-     Systemstart herausgenommen werden (`systemctl disable`, nicht `mask`,
-     damit `urbackup-gated` ihn weiterhin gezielt starten kann) —
-     `urbackup-gated` wird dann die einzige Instanz, die ihn je startet oder
-     stoppt. `urbackup-gated` selbst bekäme `Before=urbackupclientbackend.service`
-     und `After=NetworkManager.service` / `Wants=NetworkManager.service`.
-
-   - **Rechte-Trennung für Notify.** `systemctl start/stop` braucht
-     Root-Rechte, Desktop-Notifications müssen aber in die angemeldete
-     Desktop-Sitzung (D-Bus-Session-Bus) zugestellt werden — beides in einem
-     als root laufenden Dienst zu vereinen ist technisch nicht trivial.
-     Übliche Lösungen: der Dienst läuft als root und ruft für die
-     Notify-Zustellung gezielt in die Nutzersitzung hinein (`sudo -u
-     herbrand DBUS_SESSION_BUS_ADDRESS=... notify-send ...`, Adresse
-     ermittelbar über `/run/user/<uid>/bus`), oder der Dienst läuft von
-     vornherein im User-Kontext als `systemd --user`-Dienst und nutzt für
-     die eigentlichen `systemctl start/stop`-Aufrufe eine eng gefasste
-     `sudoers`-Freigabe nur für genau diese zwei Befehle. Muss vor der
-     Implementierung entschieden werden.
-
    - **Verhalten bei laufender Sicherung und Netzwechsel ins Verbotene.**
      Wenn während einer aktiven Sicherung die WLAN-SSID wechselt oder die
      Verbindung getrennt wird (z. B. Wechsel vom erlaubten Netz zum

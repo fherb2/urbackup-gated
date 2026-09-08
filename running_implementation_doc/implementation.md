@@ -22,6 +22,37 @@ Festgelegt: **`urbackup-gated`** — kürzer als der ursprüngliche Arbeitstitel
 mit einem `d` am Ende benannt wird. Systemd-Unit entsprechend
 `urbackup-gated.service`, Konfigurationsordner `/etc/urbackup-gated`.
 
+## Systemintegration und Rechteaufteilung
+
+`urbackup-gated` läuft als `systemd --user`-Dienst, nicht als System-Dienst —
+startet also erst mit der Anmeldung und endet mit der Abmeldung. Das entspricht
+der gewollten Regel „Sicherung läuft nur, wenn angemeldet". Desktop-Notifications
+laufen dadurch ganz natürlich in der eigenen Sitzung, ohne Umweg über eine fremde
+D-Bus-Session.
+
+`urbackupclientbackend.service` bleibt ein System-Dienst mit Root-Rechten
+(unverändert). Damit `urbackup-gated` ihn dennoch steuern kann, ohne selbst Root
+zu sein, bekommt es über `sudoers` eine eng gefasste, passwortlose Freigabe für
+genau zwei Befehle: `systemctl start urbackupclientbackend.service` und
+`systemctl stop urbackupclientbackend.service` — keine weiteren Rechte.
+
+`urbackupclientbackend.service` wird aus dem automatischen Systemstart genommen
+(`systemctl disable`, nicht `mask`), damit es nicht schon vor der Anmeldung mit
+Root-Rechten hochkommt. Einzige Instanz, die es je startet oder stoppt, ist
+`urbackup-gated`.
+
+**Selbstheilung nach Neuinstallation:** Das offizielle UrBackup-Installationsskript
+(`install_client_linux.sh`) ruft bedingungslos bei jedem Lauf
+`systemctl enable urbackupclientbackend.service` gefolgt von `systemctl start`
+auf (verifiziert im Quellcode, Zeilen 342/349) — unabhängig davon, ob der Dienst
+vorher bewusst deaktiviert war. Eine manuelle Neuinstallation des UrBackup-Clients
+würde also den System-Autostart mit Root-Rechten wieder aktivieren und sofort
+starten, bevor sich jemand anmeldet. Um nicht auf manuelles Nacharbeiten angewiesen
+zu sein, prüft und erzwingt `urbackup-gated` bei **jedem eigenen Start** erneut
+`systemctl disable urbackupclientbackend.service` — nicht nur einmalig bei der
+Ersteinrichtung. Damit repariert sich der Zustand spätestens bei der nächsten
+Anmeldung nach einer Neuinstallation von selbst.
+
 ## Entscheidungsregel
 
 - Ethernet-Verbindung vorhanden → UrBackup darf immer laufen.
