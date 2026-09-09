@@ -184,6 +184,22 @@ Aktuell genannte SSIDs: `lieluX`, `lielux`, `lieluxVPN`, `HZDR` — geklärt: ke
 Tippfehler, `lieluX` und `lielux` sind zwei tatsächlich unterschiedliche, echte
 Netze. Vergleich bleibt case-sensitiv.
 
+### Fail-safe bei fehlender/kaputter Konfiguration
+
+Fehlt `/etc/urbackup-gated`, ist sie nicht lesbar oder inhaltlich fehlerhaft
+(z. B. keine gültige SSID-Liste), bleibt `urbackupclientbackend` **gestoppt**
+bzw. wird gestoppt — unabhängig davon, welches Netz gerade aktiv ist. Sicherer
+Default: eine verpasste Sicherungsgelegenheit ist unkritisch, eine ungeprüft
+laufende Sicherung über ein möglicherweise nicht erlaubtes Netz wäre genau
+das Risiko, das der Dienst verhindern soll.
+
+Keine eigene Notify-Meldung für diesen Fall — der Nutzer erkennt den
+Fehlzustand indirekt am Ausbleiben der gewohnten Verbindungs-/
+Sicherungsmeldungen. Stattdessen ein **Zenity-Fehlerfenster** mit der
+konkreten Fehlerursache, das per Klick auf „OK" quittiert werden muss. Damit
+weiß der Nutzer gezielt, was kaputt ist, und kann `urbackupclientbackend` im
+Zweifel manuell starten, statt nur zu bemerken, dass „nichts mehr kommt".
+
 ## Technische Bausteine (grobe Skizze, keine Festlegung)
 
 - Sprache: Python.

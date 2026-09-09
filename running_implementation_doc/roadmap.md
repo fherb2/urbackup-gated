@@ -2,11 +2,6 @@
 
 1. Offene Punkte klären:
 
-   - **Fail-safe bei fehlender/kaputter Konfiguration.** Fehlt
-     `/etc/urbackup-gated` oder ist sie nicht lesbar/fehlerhaft: Vorschlag,
-     dann grundsätzlich **nicht** zu starten (sicherer Default), statt
-     UrBackup ungeprüft laufen zu lassen.
-
    - **Testbarkeit.** Ein Kommandozeilen-Modus, der nur anzeigt, was der
      Dienst jetzt täte (starten/stoppen/nichts), ohne es auszuführen —
      nützlich, um die SSID-Logik zu prüfen, bevor man sich live darauf
