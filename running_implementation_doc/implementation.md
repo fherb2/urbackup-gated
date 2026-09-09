@@ -88,6 +88,9 @@ Neben der Netz-Erlaubnis gibt es einen **zweiten, davon unabhängigen Zustand**:
 3. Zeitgesteuert alle 30 Sekunden (Fallback, falls ein Event verpasst wird) — bei
    diesem Trigger und beim Dienststart werden die Netzwerkverbindungen zusätzlich aktiv
    geprüft (nicht nur der zuletzt gemeldete Event-Zustand).
+4. Änderung der Kommandodatei, also manuelles Aktivieren oder Deaktivieren durch den Nutzer (siehe „Manuelles Aktivieren und Deaktivieren"). Ebenfalls per inotify erkannt, damit die Bedienung sofort wirkt und nicht bis zum nächsten Zeittakt wartet.
+
+Punkte 2 und 4 sind zwei **getrennte** beobachtete Dateien mit verschiedenen Schreibern — in die eine schreibt der NetworkManager-Dispatcher als root, in die andere der Nutzer über Notification-Button oder Kommandowerkzeug. Der Beobachtungsmechanismus ist derselbe (siehe „Netzwerk-Ereigniserkennung"), die Auslöser sind es nicht.
 
 ## Verhalten bei Netzwechsel während laufender Sicherung
 
