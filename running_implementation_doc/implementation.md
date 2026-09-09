@@ -221,6 +221,12 @@ konkreten Fehlerursache, das per Klick auf „OK" quittiert werden muss. Damit
 weiß der Nutzer gezielt, was kaputt ist, und kann `urbackupclientbackend` im
 Zweifel manuell starten, statt nur zu bemerken, dass „nichts mehr kommt".
 
+## Protokollierung
+
+Festgelegt: normale Ausgabe auf stdout/stderr, kein eigenes Logfile. Landet
+dadurch automatisch im systemd-Journal (`journalctl --user -u urbackup-gated`)
+und braucht keine eigene Rotation/Aufräumlogik.
+
 ## Technische Bausteine (grobe Skizze, keine Festlegung)
 
 - Sprache: Python.
