@@ -258,10 +258,17 @@ nötig.
 
 ### Aktuelle SSID/Verbindungsart ermitteln
 
-Noch offen: `nmcli` (Kommandozeile, passend zum bisherigen Muster bei Notify)
-oder direkt über die NetworkManager-D-Bus-API. Unabhängig von der
-Ereigniserkennung oben lösbar — beide Wege funktionieren als normaler,
-unprivilegierter Nutzer.
+Festgelegt: **`nmcli`** per Subprozess, mit `-t` (terse, maschinenlesbares
+Format) und `-f` (gezielte Felder, z. B. `TYPE,STATE,CONNECTION`) — passend
+zum bisherigen Muster bei Notify.
+
+Sprachabhängigkeit der Ausgabe ist damit vollständig beseitigt, nicht nur
+verringert: Laut `nmcli`-Handbuch, Abschnitt „INTERNATIONALIZATION NOTES",
+hängt die Ausgabe grundsätzlich von der Locale-Umgebung ab; die dort selbst
+empfohlene, verlässliche Lösung ist der Aufruf als `LC_ALL=C nmcli …`. `-t`
+regelt nur das Format (maschinenlesbare Feldtrennung), nicht die Sprache der
+Werte — beides zusammen (`LC_ALL=C nmcli -t -f …`) ist notwendig und
+laut Handbuch ausreichend.
 
 # 2 Vorgaben
 
