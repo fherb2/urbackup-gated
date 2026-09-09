@@ -1,0 +1,7 @@
+# urbackup-gated runs unprivileged but has to control one root-owned unit.
+#
+# Exactly three verbs on exactly one unit, no wildcards: start and stop for the
+# gating itself, disable to undo the unconditional "systemctl enable" that the
+# UrBackup client installer performs on every run. The read-only queries
+# is-active and is-enabled need no privileges and are not listed here.
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl start urbackupclientbackend.service, /usr/bin/systemctl stop urbackupclientbackend.service, /usr/bin/systemctl disable urbackupclientbackend.service

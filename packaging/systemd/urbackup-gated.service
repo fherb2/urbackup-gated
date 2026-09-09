@@ -1,0 +1,15 @@
+[Unit]
+Description=Gate the UrBackup client by the current network connection
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/urbackup-gated
+Restart=on-failure
+RestartSec=30
+# Exit code 78 means "broken configuration". Restarting would only pop the same
+# error dialog again every RestartSec seconds.
+RestartPreventExitStatus=78
+
+[Install]
+WantedBy=default.target
