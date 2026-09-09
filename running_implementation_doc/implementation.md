@@ -178,22 +178,58 @@ beobachtet läuft die Anzeigedauer normal ab; sie pausiert nur, solange der
 Mauszeiger über der Notification steht (verbreitetes, gewolltes Verhalten
 vieler Notification-Server, kein UrBackup-gated-spezifisches Problem).
 
-**Gedankenoption, nicht entschieden:** Ein bereits offenes Zenity-Textfenster
-(`zenity --text-info --auto-scroll`, gefüttert über eine offen gehaltene
-stdin-Pipe) lässt sich laufend mit neuem Text aktualisieren und bleibt dabei
-dasselbe Fenster — live getestet und bestätigt (`--auto-scroll`: „Nur wenn
-Text von Standardeingabe aufgenommen wird", `zenity --help-text-info`).
-Damit wäre eine dauerhaft offene, sich selbst aktualisierende Statusanzeige
-technisch möglich. Ob das gewollt ist, ist offen — bisher nur als Idee
-festgehalten.
+### Dauerhaft offenes, live aktualisierendes Statusfenster
 
-**Systemintegration bestätigt:** Der komplette Ablauf (Notification mit
-Button → Klick-Erkennung → Zenity-Fenster mit Live-Update) funktioniert
-nachweislich unverändert, wenn er nicht interaktiv im Terminal, sondern aus
-einem echten `systemd --user`-Dienst heraus gestartet wird (Testaufbau:
-`urbackup-gated-test.service`, danach entfernt) — die Sorge, ein
-`systemd --user`-Dienst könnte die Desktop-Umgebung (Anzeige/D-Bus) nicht
-erben, hat sich für dieses System nicht bestätigt.
+**Festgelegt:** Der „Details"-Klick öffnet statt einer einmaligen Momentaufnahme
+ein dauerhaft offenes Fenster, das der Nutzer stehen lassen kann und das sich
+selbst mit aktuellem Status überschreibt — kein Log, das anwächst.
+
+**Weg dahin, mit den unterwegs verworfenen Alternativen:**
+
+- `zenity --text-info --auto-scroll`: live getestet, **kann nur anhängen,
+  nicht überschreiben** — vier verschiedene Steuerzeichen-Versuche (ANSI
+  Clear-Screen, Form-Feed, zehnfaches Backspace) blieben ohne jede Wirkung,
+  Zeichen wurden entweder verschluckt oder als sichtbarer Text angehängt.
+  Damit als Weg verworfen.
+- `zenity --progress` mit `#`-Zeilen: **überschreibt** tatsächlich eine
+  einzelne Textzeile plus Prozentbalken (live bestätigt) — aber nur eine
+  einzelne Zeile, kein mehrzeiliger Statusumfang wie gewünscht. Für unseren
+  Zweck nicht ausreichend, damit ebenfalls verworfen.
+- **`yad --text-info --listen`** (Fork von Zenity, per `apt install yad`
+  nachinstalliert): laut eigenem Handbuch löscht ein Form-Feed-Zeichen
+  (`\f`, sendbar als `echo -e '\f'`) den Textinhalt. Live bestätigt — mit
+  einer wichtigen, im Quellcode (`yad`, `src/text.c`, `handle_stdin()`)
+  gefundenen Einschränkung: `yad` liest zeilenweise; ein `\f` als erstes
+  Zeichen einer Zeile löscht den gesamten Puffer, **verwirft aber den Rest
+  dieser Zeile vollständig** — Text nach dem `\f` in derselben Zeile geht
+  verloren. Der korrekte Ablauf ist deshalb: `\f` als **eigene, vollständige
+  Zeile** senden (mit eigenem Zeilenumbruch abgeschlossen), der neue Status
+  folgt als **separate** nachfolgende Zeile. So getestet, funktioniert
+  zuverlässig.
+
+**Damit ist `yad` eine zusätzliche Laufzeitabhängigkeit** neben `notify-send`
+(aus `libnotify-bin`) und `zenity` (weiterhin für das einmalige
+Fail-safe-Fehlerfenster bei kaputter Konfiguration, s. o. — dort reicht eine
+einmalige Meldung, kein Live-Update nötig).
+
+**Weitere Festlegungen zu diesem Fenster:**
+
+- **Aktualisierungstakt:** im Rahmen der bestehenden 30-Sekunden-Zeitscheibe
+  des Dienstes, aber auf ca. 5 Sekunden verkürzt, solange dieses Fenster
+  offen ist.
+- **Schließen erkennen:** über die fehlschlagende Schreiboperation auf die
+  dann geschlossene Pipe (Broken Pipe) — einfachstes, übliches Verfahren,
+  kein Rückkanal nötig.
+- **Nur ein Fenster gleichzeitig:** Solange dieses Statusfenster offen ist,
+  werden die regulären Notify-Meldungen unterdrückt — sie wären redundant,
+  der Status ist ja im offenen Fenster einsehbar.
+
+**Noch offen für die Implementierungsphase:** Ob `yad --text-info --listen`
+genauso wie zuvor bei Zenity bestätigt aus einem echten `systemd --user`-
+Dienst heraus funktioniert (Anzeige-/D-Bus-Vererbung), wurde für `yad`
+bisher **nicht** eigens getestet — alle `yad`-Tests liefen interaktiv im
+Terminal. Sollte vor der eigentlichen Implementierung noch verifiziert
+werden, analog zum früheren `urbackup-gated-test.service`-Testaufbau.
 
 ## Konfiguration
 
