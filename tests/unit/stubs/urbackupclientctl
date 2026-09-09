@@ -1,0 +1,21 @@
+#!/bin/sh
+# Test stub for urbackupclientctl.
+#
+# client_status.json in the scenario directory is served as-is. Without it the
+# stub imitates the real client with a stopped backend, which prints a
+# plain-text error line and still exits successfully.
+set -eu
+
+: "${URBACKUP_GATED_SCENARIO:?scenario directory not set}"
+
+[ "${1:-}" = status ] || { echo "stub urbackupclientctl: unexpected: $*" >&2; exit 2; }
+
+if [ -f "$URBACKUP_GATED_SCENARIO/client_status.fail" ]; then
+    exit 1
+fi
+if [ -f "$URBACKUP_GATED_SCENARIO/client_status.json" ]; then
+    cat "$URBACKUP_GATED_SCENARIO/client_status.json"
+    exit 0
+fi
+
+echo "Error getting status"

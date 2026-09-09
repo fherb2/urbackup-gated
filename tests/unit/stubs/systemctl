@@ -1,0 +1,27 @@
+#!/bin/sh
+# Test stub for systemctl.
+#
+# The unit's active and enabled state live as marker files in the scenario
+# directory, so a start or stop is observable and the query verbs answer
+# consistently afterwards.
+set -eu
+
+: "${URBACKUP_GATED_SCENARIO:?scenario directory not set}"
+
+printf '%s\n' "$*" >>"$URBACKUP_GATED_SCENARIO/systemctl-calls.log"
+
+verb=$1
+shift
+[ "${1:-}" = --quiet ] && shift || true
+
+active=$URBACKUP_GATED_SCENARIO/client_active
+enabled=$URBACKUP_GATED_SCENARIO/client_enabled
+
+case "$verb" in
+    is-active)  [ -f "$active" ] ;;
+    is-enabled) [ -f "$enabled" ] ;;
+    start)      touch "$active" ;;
+    stop)       rm -f "$active" ;;
+    disable)    rm -f "$enabled" ;;
+    *) echo "stub systemctl: unexpected verb: $verb" >&2; exit 2 ;;
+esac

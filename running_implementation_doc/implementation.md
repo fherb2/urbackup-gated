@@ -400,6 +400,42 @@ regelt nur das Format (maschinenlesbare Feldtrennung), nicht die Sprache der
 Werte — beides zusammen (`LC_ALL=C nmcli -t -f …`) ist notwendig und
 laut Handbuch ausreichend.
 
+## Prüfung und Abnahme
+
+Die Prüfung ist in drei Stufen geteilt, weil sich die drei nach ihren Voraussetzungen unterscheiden, nicht nach ihrem Gegenstand: Stufe 1 braucht nichts, Stufe 2 braucht root und ein eigenes System, Stufe 3 braucht einen echten Menschen an einem echten Desktop. Ungefähr neun Zehntel sind damit automatisiert.
+
+### Stufe 1: Unit-Tests
+
+`tests/run-unit.sh`, ohne root, ohne Container, ohne zusätzliche Pakete (`unittest` aus der Standardbibliothek). Statt `subprocess` wegzumocken liegen in `tests/unit/stubs/` Ersatzprogramme für `nmcli`, `urbackupclientctl`, `systemctl` und `sudo`, die über `PATH` bzw. über die Modulkonstanten vorgeschaltet werden und jeden Aufruf mitschreiben — geprüft wird damit die **tatsächlich gebaute Kommandozeile**, nicht eine Attrappe davon. Die nmcli-Ausgaben liegen als echte Beispieldateien unter `tests/unit/scenarios/`, je Szenario ein Ordner.
+
+Abgedeckt: die vollständige Entscheidungsmatrix, das Zerlegen der nmcli-Ausgabe samt Escaping, die Konfigurationsprüfung mit ihren Ablehnungen, die Flag-Semantik samt atomarem Schreiben, das Parsen des Client-Status in beiden Ausgabeformen und die Textaufbereitung.
+
+Dass die Tests wirklich greifen, ist selbst geprüft: Sieben absichtlich eingebaute Fehler — Ethernet hebelt verbotenes WLAN aus, Nutzer-Einspruch wird ignoriert, Profilname statt SSID, WLAN-Scan nicht mehr unterdrückt, `running_processes` nicht mehr gelesen, Loopback zählt als Verbindung, Zeitstempel ohne Zeitzone — wurden alle sieben erkannt.
+
+### Stufe 2: Integrationstests im Container
+
+`tests/container/run.sh` baut das Abbild aus `tests/container/Dockerfile`, startet den Container und führt darin `tests/container/inside/run.sh` aus. Voraussetzung ist ein erreichbarer Docker-Daemon und privilegierter Modus, weil systemd als PID 1 im Container laufen muss; das Repository wird nur lesend eingehängt, am Wirtssystem wird nichts verändert.
+
+Gefälscht wird darin ausschließlich, was ein Container prinzipiell nicht kann: der UrBackup-Client (eine Unit **gleichen Namens**, die `sleep` ausführt, sodass Starten, Stoppen, Aktivieren und Abfragen von unserer Seite aus identisch aussehen), `nmcli` (kein Container erzeugt eine echte WLAN-Assoziation) und `notify-send` (kein Notification-Server vorhanden; die Aufrufe werden mitgeschrieben, damit die angebotenen Schaltflächen prüfbar bleiben).
+
+Abgedeckt: `install.sh` auf einem frischen System und `uninstall.sh` rückstandsfrei; Rechte und Eigentümer der abgelegten Dateien; das Herausnehmen des Client-Dienstes aus dem Systemstart; die **Enge der sudoers-Freigabe**, geprüft in beide Richtungen — die drei erlaubten Befehle gelingen, `restart`, ein anderer Dienst, eine Shell und ein `systemctl` ohne Unit-Argument werden abgewiesen; der Aktionsfilter des Dispatchers einschließlich des ignorierten `vpn-up`; das Gating von Ende zu Ende über die Trigger-Dateien; und dass die eigenen `state.json`-Schreibvorgänge die Schleife **nicht** aufwecken, gemessen daran, dass bei einem Prüftakt von 60 Sekunden acht Sekunden lang Ruhe bleibt.
+
+Ein bewusster Verzicht: Der Dienst wird im Container **direkt** gestartet, nicht über `systemd --user`. Eine Nutzersitzung mit eigenem Session-Bus im Container aufzubauen kostet viel Aufwand, der in Container-Klempnerei fließt statt in Erkenntnis über unseren Code. Die Unit-Datei wird stattdessen statisch auf Syntaxfehler geprüft; ihr Zusammenspiel mit der echten Sitzung fällt in Stufe 3.
+
+### Stufe 3: Abnahme von Hand
+
+Was hier steht, ist der Rest, der sich nicht sinnvoll automatisieren lässt: die Erscheinung auf **diesem** Desktop (ein Container würde dunst unter Xvfb benutzen, also einen anderen Notification-Server — ein grüner Test dort sagt über Plasma nichts) und ein echter WLAN-Wechsel (sauber fälschen ließe er sich nur mit `mac80211_hwsim` und `hostapd`, also mit einem Kernel-Modul auf dem Wirt — unverhältnismäßig gegenüber einer Handprüfung von dreißig Sekunden).
+
+1. **Meldung und Schaltflächen.** Eine Meldung abwarten. Erwartet: `Details` ist vorhanden, dazu genau eine der beiden Schaltflächen `Deactivate` bzw. `Activate` passend zum aktuellen Nutzer-Zustand; Anzeigedauer wie konfiguriert; die Dauer pausiert, solange der Mauszeiger über der Meldung steht.
+2. **Live-Fenster.** `Details` klicken. Erwartet: Das Fenster öffnet sich, der Inhalt wird im Takt von etwa 5 Sekunden **überschrieben** und wächst nicht an; solange es offen ist, kommen keine Meldungen; nach dem Schließen kommen sie wieder.
+3. **Echter Netzwechsel.** Vom erlaubten Netz auf den Handy-Hotspot wechseln. Erwartet: Der Client stoppt binnen 30 Sekunden, und die Meldung nennt die SSID als Grund. Zurück ins erlaubte Netz: Der Client startet wieder.
+4. **Dockingstation-Strenge.** Ethernet und ein fremdes WLAN gleichzeitig aktiv. Erwartet: Es wird **nicht** gesichert — das ist der bewusst gewählte Preis. WLAN abschalten: Es läuft wieder.
+5. **Handschalter.** Deaktivieren über die Schaltfläche und über `urbackup-gated-ctl deactivate`, beides wirkt. Dann im verbotenen Netz aktivieren: Der Client darf **nicht** starten.
+6. **Fail-safe.** Die Konfiguration absichtlich beschädigen und den Dienst neu starten. Erwartet: Fehlerfenster mit der konkreten Ursache, Client gestoppt, und der Dienst startet sich **nicht** in einer Schleife neu — `systemctl --user status urbackup-gated` zeigt den Fehlschlag.
+7. **Selbstheilung.** `sudo systemctl enable urbackupclientbackend`, dann `urbackup-gated` neu starten. Erwartet: Der Dienst ist danach wieder deaktiviert, mit einer entsprechenden Zeile im Journal.
+8. **Abmelden.** Erwartet: Der Client wird beim Beenden der Sitzung gestoppt.
+9. **Erstes echtes Backup.** Die Fortschrittsanzeige gegen die Wirklichkeit prüfen. Das ist die **einzige inhaltlich offene Annahme** der Implementierung: Die genaue JSON-Struktur von `urbackupclientctl status` konnte nicht verifiziert werden, weil das Client-Backend beim Programmieren nicht lief. Der Parser deckt beide plausiblen Formen ab (`running_processes`-Liste oder Felder direkt auf oberster Ebene) und fällt sonst geordnet auf „nicht erreichbar" zurück — aber ob die Zahlen stimmen, zeigt erst der erste Lauf.
+
 # 2 Vorgaben
 
 _Noch nicht ausgearbeitet._

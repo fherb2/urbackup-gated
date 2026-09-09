@@ -1,0 +1,25 @@
+#!/bin/sh
+# Test stub for nmcli.
+#
+# Prints canned output from the scenario directory named by
+# URBACKUP_GATED_SCENARIO, chosen by the query it is asked for, and records
+# every invocation so tests can assert on the command line we build.
+set -eu
+
+: "${URBACKUP_GATED_SCENARIO:?scenario directory not set}"
+
+printf '%s\tLC_ALL=%s\n' "$*" "${LC_ALL:-unset}" \
+    >>"$URBACKUP_GATED_SCENARIO/nmcli-calls.log"
+
+case "$*" in
+    *"device status"*) name=device_status ;;
+    *"device wifi"*) name=wifi_list ;;
+    *) echo "stub nmcli: unexpected invocation: $*" >&2; exit 2 ;;
+esac
+
+if [ -f "$URBACKUP_GATED_SCENARIO/$name.fail" ]; then
+    cat "$URBACKUP_GATED_SCENARIO/$name.fail" >&2
+    exit 1
+fi
+
+cat "$URBACKUP_GATED_SCENARIO/$name"
