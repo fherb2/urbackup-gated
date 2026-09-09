@@ -33,8 +33,27 @@ D-Bus-Session.
 `urbackupclientbackend.service` bleibt ein System-Dienst mit Root-Rechten
 (unverändert). Damit `urbackup-gated` ihn dennoch steuern kann, ohne selbst Root
 zu sein, bekommt es über `sudoers` eine eng gefasste, passwortlose Freigabe für
-genau zwei Befehle: `systemctl start urbackupclientbackend.service` und
-`systemctl stop urbackupclientbackend.service` — keine weiteren Rechte.
+genau drei Befehle, jeweils mit absolutem Pfad `/usr/bin/systemctl` und ohne
+Platzhalter: `start`, `stop` und `disable`, jedes Mal auf
+`urbackupclientbackend.service` — keine weiteren Rechte. Der dritte Eintrag ist
+nicht optional: Ohne ihn kann die weiter unten beschriebene Selbstheilung nach
+einer UrBackup-Neuinstallation nicht funktionieren, weil `systemctl disable`
+ebenfalls Root-Rechte verlangt. Die reinen Abfragen `is-active` und `is-enabled`
+sind lesend, brauchen kein `sudo` und stehen deshalb **nicht** in der Freigabe.
+
+**Ablageort der Freigabe:** eine eigene Datei in `/etc/sudoers.d/`, nicht ein
+Eingriff in `/etc/sudoers` selbst — so kann `install.sh` sie anlegen und
+`uninstall.sh` sie restlos entfernen, ohne je an einer fremden Datei zu
+schneiden. Drei Eigenschaften sind dabei zwingend, weil sie sonst je genau
+einmal schmerzhaft auffallen:
+
+- Der Dateiname darf **keinen Punkt** enthalten, sonst wird die Datei
+  kommentarlos ignoriert. Also `urbackup-gated`, nicht `urbackup-gated.conf`.
+- Eigentümer `root:root`, Modus `0440`.
+- `install.sh` schreibt zuerst in eine Temporärdatei, prüft sie mit
+  **`visudo -c -f`** und schiebt sie erst bei Erfolg an ihren Platz. Eine
+  fehlerhafte sudoers-Datei sperrt `sudo` systemweit aus — das ist der einzige
+  Fehler in diesem Vorhaben, der wirklich teuer wäre.
 
 `urbackupclientbackend.service` wird aus dem automatischen Systemstart genommen
 (`systemctl disable`, nicht `mask`), damit es nicht schon vor der Anmeldung mit
@@ -74,10 +93,18 @@ Die so ermittelte Erlaubnis ist nur die eine Hälfte; sie wird mit dem manuellen
 Neben der Netz-Erlaubnis gibt es einen **zweiten, davon unabhängigen Zustand**: die manuelle Freigabe durch den Nutzer. Beide werden **verundet** — gesichert wird nur, wenn das Netz passt **und** der Nutzer nicht deaktiviert hat.
 
 - Der Zustand wird bei **jedem Dienststart** auf „aktiviert" gesetzt. „Nicht deaktiviert" ist also der Normalfall, genau wie zum Dienststart.
-- Er wird **nicht persistiert** und lebt nur im Speicher des laufenden Dienstes (und als Anzeigefeld im vollständigen Status, siehe `state.json`). Dass ein manuelles „Deaktiviert" spätestens beim nächsten Dienststart verfällt, ist gewollt: Das Werkzeug arbeitet auf Rechnern, die nicht durchlaufen, also spätestens am nächsten Tag wieder anlaufen — und bis dahin erinnern die Zwei-Stunden-Meldungen daran.
+- Er wird **nicht dauerhaft gespeichert**: Er lebt in einer Datei unter `/run` (Protokoll s. u.), die beim Neustart mit dem tmpfs verschwindet und die der Dienst zusätzlich bei jedem eigenen Start löscht. Dass ein manuelles „Deaktiviert" spätestens beim nächsten Dienststart verfällt, ist gewollt: Das Werkzeug arbeitet auf Rechnern, die nicht durchlaufen, also spätestens am nächsten Tag wieder anlaufen — und bis dahin erinnern die Zwei-Stunden-Meldungen daran.
 - Der manuelle Zustand kann die Netzregel in **keiner** Richtung übergehen. „Aktivieren" heißt nicht „jetzt trotzdem sichern", sondern nur „meinen Einspruch zurückziehen"; ist das Netz nicht erlaubt, bleibt gestoppt. Andernfalls wäre genau die Lücke offen, die dieser Dienst schließen soll.
 
 **Zwei Bedienwege, ein Mechanismus:** Sowohl der Notification-Button als auch das Kommandozeilenwerkzeug schreiben in eine **Kommandodatei unter `/run/urbackup-gated/`**, die der Dienst per inotify beobachtet — dasselbe Verfahren, das für die Netzwerk-Ereigniserkennung ohnehin schon festgelegt ist (siehe „Netzwerk-Ereigniserkennung"). Kein zusätzliches Übertragungsverfahren, und die Wirkung tritt sofort ein statt erst beim nächsten Zeittakt.
+
+**Protokoll dieser Datei — eine Zustandsdatei, keine Befehlsliste.** Weil „absolutes Setzen, kein Umschalten" (s. u.) ohnehin gilt, braucht es keine Warteschlange und keine Befehle: Es genügt der gewünschte Zustand, und der letzte Schreiber gewinnt. Ein verlorener Zwischenschritt ist bedeutungslos, weil nur der Endzustand zählt. Das ist der Grund, warum dieser Teil so einfach ausfallen darf.
+
+- Datei `/run/urbackup-gated/user-enabled`, Inhalt genau ein Wort: `enabled` oder `disabled`. Lesbar und notfalls von Hand mit `echo` zu setzen.
+- Geschrieben wird **atomar**: erst in eine Temporärdatei im selben Verzeichnis, dann `rename`. Ein Umbenennen innerhalb eines Dateisystems ist unteilbar, der Leser sieht also nie einen halben Inhalt.
+- **Fehlende Datei bedeutet `enabled`.** Damit ergibt sich die Regel „bei jedem Dienststart aktiviert" von selbst: Der Dienst löscht die Datei bei seinem Start, und das Zurücksetzen ist im Dateisystem sichtbar statt nur im Speicher.
+- Unlesbarer oder unsinniger Inhalt gilt als `disabled`, mit Eintrag ins Journal — dieselbe konservative Richtung wie bei kaputter Konfiguration.
+- Der Dienst liest die Datei **bei jeder Bewertung** neu, nicht nur beim inotify-Ereignis. Ein verpasstes Ereignis heilt damit spätestens beim nächsten Zeittakt aus; inotify sorgt allein für die kurze Reaktionszeit, nicht für die Richtigkeit.
 
 **Invariante: absolutes Setzen, kein Umschalten.** Die beiden Befehle lauten „setze auf deaktiviert" bzw. „setze auf aktiviert", niemals „kippe den aktuellen Zustand". Grund: Ein Notification-Aufruf blockiert bis zum Klick oder Timeout, zwischen Anzeige und Klick können Minuten liegen, und in dieser Zeit kann der Zustand über den anderen Bedienweg schon verändert worden sein. Beim absoluten Setzen ist ein solcher verspäteter Klick wirkungsgleich mit einem sofortigen (idempotent); ein Umschalter hingegen würde den zwischenzeitlich gesetzten Zustand unbeabsichtigt kippen.
 
@@ -121,6 +148,34 @@ Idee einer UUID-Datei unter `/tmp`. `/run` ist per Definition ein tmpfs und wird
 bei jedem Neustart automatisch geleert — das erfüllt genau den gewünschten Zweck
 ("Datei weg = Ausgangslage klar nach Neustart"), ist aber unter einem festen,
 auffindbaren Namen leichter zu debuggen als eine zufällige UUID-Datei.
+
+**Warum nicht `/tmp`, obwohl es näher liegt:** Erstens ist dort das Leeren beim
+Neustart **nicht zugesichert**, sondern Konfigurationssache — je nach Distribution
+und Version liegt `/tmp` auf der Platte und wird nur von einem Aufräumdienst nach
+Alter geleert. Bei `/run` ist die tmpfs-Eigenschaft dagegen definiert und keine
+Annahme. Zweitens, und das gibt den Ausschlag: `/tmp` ist für alle schreibbar. Die
+Kommandodatei (s. „Manuelles Aktivieren und Deaktivieren") ist ein **Steuerkanal**
+— wer hineinschreibt, schaltet die Sicherung ab. Ein vorhersagbarer Name in einem
+weltweit schreibbaren Verzeichnis heißt, dass jeder lokale Prozess diesen Kanal
+bedienen oder die Datei vorbelegen kann, und wegen des Sticky-Bits könnten wir
+eine fremde Datei dort nicht einmal ersetzen. Der Schaden bliebe begrenzt — die
+Netzregel gilt weiter und ist nicht übergehbar, es bliebe also bei „Sicherung
+lahmgelegt" —, aber der Ausschluss kostet uns nichts.
+
+**Anlegen des Verzeichnisses:** Ein `--user`-Dienst kann in `/run` selbst kein
+Verzeichnis erstellen, denn `/run` gehört root und ist `drwxr-xr-x` (am System
+nachgesehen). `install.sh` installiert deshalb einen `tmpfiles.d`-Schnipsel, der
+`/run/urbackup-gated` bei jedem Neustart mit dem Nutzer des Dienstes als
+Eigentümer und Modus `0755` anlegt. Damit darf nur dieser Nutzer — und root, also
+der NetworkManager-Dispatcher — dort Dateien anlegen, während Lesen für alle
+möglich bleibt, was für die Statusanzeige praktisch ist. Der Dispatcher schreibt
+dadurch auf einen festen Pfad und muss keine UID ermitteln; genau deshalb ist
+`$XDG_RUNTIME_DIR` (`/run/user/<uid>/`) nicht gewählt, obwohl systemd ein solches
+Verzeichnis per `RuntimeDirectory=` von selbst anlegen und aufräumen würde.
+
+**Benannte Nebenwirkung:** Das ist eine Installation für genau **einen** Nutzer.
+Für dieses Vorhaben ist das richtig; für einen Mehrbenutzerrechner wäre es zu
+wenig gedacht.
 
 **Festgelegt:** Dort wird nicht nur der reine Boot-Merker abgelegt, sondern der
 **vollständige Status** — erkannte Netzwerklage (alle aktiven Verbindungen mit Typ und, bei WLAN, SSID),
@@ -313,6 +368,11 @@ D-Bus-Dienst. Der NetworkManager-Dispatcher (läuft als **root**, Skript unter
 beobachtet sie per inotify (z. B. Python-`watchdog`) und löst darauf sofort
 eine Prüfung aus. Dazu weiterhin der 30-Sekunden-Timer im Dienst selbst als
 Fallback, falls ein Event verpasst wird.
+
+**Zwei Eigenschaften der Überwachung, die nicht Feinheit, sondern Voraussetzung sind:**
+
+- Überwacht wird **das Verzeichnis, nicht die einzelne Datei.** Beide Trigger-Dateien werden atomar per `rename` ersetzt (s. „Manuelles Aktivieren und Deaktivieren"), und eine Überwachung, die an der Datei selbst hängt, verliert dabei stillschweigend ihr Ziel — sie beobachtet danach ein Objekt, das niemand mehr beschreibt, ohne dass ein Fehler auffällt. Eine Verzeichnisüberwachung deckt damit beide Dateien mit einem einzigen Beobachter ab.
+- Der Beobachter reagiert **ausschließlich auf die beiden bekannten Dateinamen** und ignoriert alles andere im Verzeichnis. Das ist zwingend, weil der Dienst seine `state.json` in dasselbe Verzeichnis schreibt: Ohne diesen Filter würde sein eigener Schreibvorgang die eigene Überwachung auslösen, diese eine neue Bewertung anstoßen und die wieder schreiben — eine Endlosschleife im Sekundentakt.
 
 Begründung gegenüber den Alternativen: Ein Unix-Signal an die Prozess-ID des
 Dienstes wäre im Programmumfang minimal einfacher gewesen, hätte aber eine
