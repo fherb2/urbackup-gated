@@ -227,18 +227,41 @@ Festgelegt: normale Ausgabe auf stdout/stderr, kein eigenes Logfile. Landet
 dadurch automatisch im systemd-Journal (`journalctl --user -u urbackup-gated`)
 und braucht keine eigene Rotation/Aufräumlogik.
 
-## Technische Bausteine (grobe Skizze, keine Festlegung)
+## Technische Bausteine
 
-- Sprache: Python.
-- Netzwerk-Ereignisse: NetworkManager-Dispatcher-Skript unter
-  `/etc/NetworkManager/dispatcher.d/`, das den laufenden Dienst antriggert
-  (z. B. per Signal oder D-Bus-Aufruf), plus eigener 30-Sekunden-Timer im Dienst
-  selbst als Fallback.
-- Aktuelle SSID/Verbindungsart ermitteln: `nmcli` (Kommandozeile) oder direkt über
-  die NetworkManager-D-Bus-API.
-- Notify: `notify-send` (aus `libnotify-bin`) per Subprozess, oder eine
-  Python-D-Bus-Bibliothek — einfacher Subprozess-Aufruf ist vermutlich robuster
-  und hat weniger Abhängigkeiten.
+Festgelegt: Sprache **Python**.
+
+Festgelegt: Notify per **`notify-send`-Subprozessaufruf** (aus `libnotify-bin`),
+keine eigene D-Bus-Bibliothek — live getestet und bestätigt funktionsfähig
+(s. „Klickbare Notification mit Detailanzeige").
+
+### Netzwerk-Ereigniserkennung
+
+Festgelegt: **Trigger-Datei + inotify**, nicht Unix-Signal oder eigener
+D-Bus-Dienst. Der NetworkManager-Dispatcher (läuft als **root**, Skript unter
+`/etc/NetworkManager/dispatcher.d/`, ausgelöst bei den Aktionen `up`, `down`,
+`vpn-up`, `vpn-down` u. a. — vollständige Liste per
+`man NetworkManager-dispatcher`) berührt nur eine Datei; `urbackup-gated`
+beobachtet sie per inotify (z. B. Python-`watchdog`) und löst darauf sofort
+eine Prüfung aus. Dazu weiterhin der 30-Sekunden-Timer im Dienst selbst als
+Fallback, falls ein Event verpasst wird.
+
+Begründung gegenüber den Alternativen: Ein Unix-Signal an die Prozess-ID des
+Dienstes wäre im Programmumfang minimal einfacher gewesen, hätte aber eine
+Fehlerquelle über eine potenziell veraltete PID-Datei (Dienst neu gestartet,
+alte PID-Datei noch vorhanden). Ein eigener D-Bus-Dienst hätte root gezwungen,
+gezielt die Session-Bus-Adresse des richtigen Nutzers zu ermitteln, mit
+deutlich mehr beweglichen Teilen. Die Trigger-Datei umgeht beide Probleme:
+kein PID-Verfall, keine Root-zu-Nutzer-Adressierung — root kann in die vom
+Dienst angelegte Datei problemlos schreiben, keine gesonderte Rechteklärung
+nötig.
+
+### Aktuelle SSID/Verbindungsart ermitteln
+
+Noch offen: `nmcli` (Kommandozeile, passend zum bisherigen Muster bei Notify)
+oder direkt über die NetworkManager-D-Bus-API. Unabhängig von der
+Ereigniserkennung oben lösbar — beide Wege funktionieren als normaler,
+unprivilegierter Nutzer.
 
 # 2 Vorgaben
 
