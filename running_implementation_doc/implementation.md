@@ -162,7 +162,9 @@ Die eigentliche Ermittlungslogik existiert damit nur ein einziges Mal im Code.
 - Anzeigedauer 5 Sekunden, konfigurierbar.
 
 Datenquelle für Serververbindung/Sicherungsfortschritt: `urbackupclientctl status`
-(JSON-Ausgabe). Die relevanten Felder, alle im Quellcode verifiziert
+(JSON-Ausgabe). **Geprüft:** Der Aufruf funktioniert mit reinen Benutzerrechten, ohne `sudo`. Das war nicht selbstverständlich und ist tragend für den Entwurf: Der Aufruf erfolgt bei jedem Zeittakt, also alle 30 bzw. 5 Sekunden. Hätte er Root-Rechte gebraucht, wäre eine dritte, sehr häufig genutzte `sudoers`-Freigabe nötig geworden — und die eng gefasste Rechteaufteilung (siehe „Systemintegration und Rechteaufteilung") bliebe bei genau zwei seltenen Befehlen nicht mehr bestehen.
+
+Die relevanten Felder, alle im Quellcode verifiziert
 (`urbackupclient/ClientServiceCMD.cpp`, `urbackupserver/FileBackup.cpp`,
 `urbackupclient/InternetClient.cpp`):
 
@@ -237,10 +239,9 @@ selbst mit aktuellem Status überschreibt — kein Log, das anwächst.
   folgt als **separate** nachfolgende Zeile. So getestet, funktioniert
   zuverlässig.
 
-**Damit ist `yad` eine zusätzliche Laufzeitabhängigkeit** neben `notify-send`
-(aus `libnotify-bin`) und `zenity` (weiterhin für das einmalige
-Fail-safe-Fehlerfenster bei kaputter Konfiguration, s. o. — dort reicht eine
-einmalige Meldung, kein Live-Update nötig).
+**Damit ist `yad` eine zusätzliche Laufzeitabhängigkeit** neben `notify-send` (aus `libnotify-bin`). **`zenity` entfällt dafür vollständig:** Auch das einmalige Fail-safe-Fehlerfenster bei kaputter Konfiguration (s. u.) wird mit `yad` gebaut. Damit laufen alle Dialoge über dasselbe Programm, und unter dem Strich ist es eine Abhängigkeit weniger statt einer mehr — `yad` brauchen wir für das Live-Fenster ohnehin, `zenity` könnte danach nur noch Dinge, die `yad` auch kann.
+
+Folge daraus, die beim Programmieren nicht untergehen darf: Weil jetzt **auch die Fehleranzeige** an `yad` hängt, prüft der Dienst bei seinem Start, ob `yad` überhaupt vorhanden ist, und schreibt dessen Fehlen ins Journal. Ohne diese Prüfung fiele im kaputten Zustand ausgerechnet die Meldung darüber aus — der Nutzer sähe gar nichts und hätte keinen Anhaltspunkt.
 
 **Weitere Festlegungen zu diesem Fenster:**
 
@@ -254,12 +255,11 @@ einmalige Meldung, kein Live-Update nötig).
   werden die regulären Notify-Meldungen unterdrückt — sie wären redundant,
   der Status ist ja im offenen Fenster einsehbar.
 
-**Noch offen für die Implementierungsphase:** Ob `yad --text-info --listen`
-genauso wie zuvor bei Zenity bestätigt aus einem echten `systemd --user`-
-Dienst heraus funktioniert (Anzeige-/D-Bus-Vererbung), wurde für `yad`
-bisher **nicht** eigens getestet — alle `yad`-Tests liefen interaktiv im
-Terminal. Sollte vor der eigentlichen Implementierung noch verifiziert
-werden, analog zum früheren `urbackup-gated-test.service`-Testaufbau.
+**Kein eigener Test nötig, wird beim ersten Lauf des echten Dienstes mitverifiziert:** Alle `yad`-Tests liefen interaktiv im Terminal, nicht aus einem `systemd --user`-Dienst heraus. Ein eigener Testaufbau dafür (analog zum früheren `urbackup-gated-test.service`) ist trotzdem nicht erforderlich, denn was der damalige Zenity-Test bewiesen hat, ist keine Eigenschaft des Dialogprogramms, sondern **der Sitzung**: dass der `systemd --user`-Manager `DISPLAY`/`WAYLAND_DISPLAY`/`XAUTHORITY`/`DBUS_SESSION_BUS_ADDRESS` an seine Kinder weitergibt. Welches Programm damit anschließend den Anzeigeserver anspricht, ändert an dieser Weitergabe nichts.
+
+Der Vollständigkeit halber die Einschränkung dieses Schlusses: `yad` und `zenity` sind auf diesem Rechner **nicht derselbe Bibliotheksstand** — `ldd` zeigt `yad` gegen `libgtk-3`, `zenity` gegen `libgtk-4` (beobachtet, nicht aus der Dokumentation). Das entkräftet die Argumentation nicht, weil beide GTK-Generationen dieselben Umgebungsvariablen auswerten; es heißt nur, dass hier nicht „identische Bibliothek, also bewiesen" behauptet wird.
+
+Der `--listen`-Teil ist ohnehin keine systemd-Frage: Der Dienst bekommt von systemd `/dev/null` auf seinem eigenen stdin, aber `yad` erhält seine Pipe nicht von dort, sondern von dem Subprozessaufruf, mit dem `urbackup-gated` es selbst startet. Diese Pipe kontrollieren wir vollständig.
 
 ## Konfiguration
 
@@ -290,7 +290,7 @@ Zweifel manuell starten, statt nur zu bemerken, dass „nichts mehr kommt".
 
 Festgelegt: normale Ausgabe auf stdout/stderr, kein eigenes Logfile. Landet
 dadurch automatisch im systemd-Journal (`journalctl --user -u urbackup-gated`)
-und braucht keine eigene Rotation/Aufräumlogik. Fehleranzeige bei `systemctl status urbackup-gated`.
+und braucht keine eigene Rotation/Aufräumlogik. Fehleranzeige bei `systemctl --user status urbackup-gated` — mit `--user`, da es ein Dienst der Nutzersitzung ist und der Befehl ohne diese Option den System-Manager abfragen würde, der die Unit gar nicht kennt.
 
 ## Technische Bausteine
 
