@@ -91,14 +91,35 @@ UrBackup nimmt eine so unterbrochene Sicherung später von selbst wieder auf,
 wie wir bei der Fehlersuche am eigentlichen UrBackup-Client mehrfach
 beobachtet haben.
 
-## Zustand und Merken zwischen Aufrufen
+## Zustand, Merken zwischen Aufrufen und Statusabfrage
 
-Vorschlag zur Diskussion, abweichend von der ursprünglichen Idee (UUID-Datei unter
-`/tmp`): Ein fester, bekannter Pfad unter `/run/urbackup-gated/state.json`. `/run`
-ist per Definition ein tmpfs und wird bei jedem Neustart automatisch geleert — das
-erfüllt genau den gewünschten Zweck ("Datei weg = Ausgangslage klar nach Neustart"),
-ist aber unter einem festen, auffindbaren Namen leichter zu debuggen als eine
-zufällige UUID-Datei, die man beim Fehlersuchen erst wiederfinden müsste.
+Fester, bekannter Pfad `/run/urbackup-gated/state.json` statt der ursprünglichen
+Idee einer UUID-Datei unter `/tmp`. `/run` ist per Definition ein tmpfs und wird
+bei jedem Neustart automatisch geleert — das erfüllt genau den gewünschten Zweck
+("Datei weg = Ausgangslage klar nach Neustart"), ist aber unter einem festen,
+auffindbaren Namen leichter zu debuggen als eine zufällige UUID-Datei.
+
+**Festgelegt:** Dort wird nicht nur der reine Boot-Merker abgelegt, sondern der
+**vollständige Status** — erkannte Netzwerklage (Ethernet ja/nein, aktive SSID),
+getroffene Entscheidung samt Begründung, sowie der UrBackup-Client-Status
+(`urbackupclientctl status`, s. u.). Es gibt dafür genau eine Backend-Funktion
+„vollständigen Status ermitteln/aufbereiten", die von drei Stellen verwendet wird:
+
+1. **Der Dienst selbst** — ruft sie bei jedem Trigger (Start, Netzwechsel,
+   30-Sekunden-Takt) auf und schreibt das Ergebnis nach `state.json`.
+2. **Das Zenity-Detailfenster** beim Notify-Klick (s. u.) — ruft dieselbe
+   Funktion live neu auf, da es im selben Prozess läuft; kein Umweg über die
+   Datei nötig, dadurch tagesaktuellster Stand.
+3. **Ein separates Kommandozeilen-Statuswerkzeug** (löst die „Testbarkeit"-Frage
+   aus dem Konzept) — liest nur `state.json` und zeigt sie lesbar an, ohne
+   selbst etwas neu zu ermitteln. Dadurch höchstens rund 30 Sekunden alt
+   (Zeittrigger-Intervall), aber ohne eigene Berechtigungen/Logik-Duplizierung.
+   Ersetzt die ursprünglich angedachte separate Dry-Run-Logik: Ein eigener
+   Entscheidungs-Simulator wäre nötig gewesen, wenn der Dienst selbst befragt
+   werden sollte, ohne dass er läuft — da er aber ohnehin läuft, reicht das
+   Auslesen seines echten, aktuellen Zustands.
+
+Die eigentliche Ermittlungslogik existiert damit nur ein einziges Mal im Code.
 
 ## Notify-Meldungen
 

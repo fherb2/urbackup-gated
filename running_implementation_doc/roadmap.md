@@ -2,11 +2,6 @@
 
 1. Offene Punkte klären:
 
-   - **Testbarkeit.** Ein Kommandozeilen-Modus, der nur anzeigt, was der
-     Dienst jetzt täte (starten/stoppen/nichts), ohne es auszuführen —
-     nützlich, um die SSID-Logik zu prüfen, bevor man sich live darauf
-     verlässt.
-
    - **Protokollierung.** Normale Log-Ausgabe auf stdout/stderr, damit sie
      im systemd-Journal landet (`journalctl -u urbackup-gated`) — kein
      eigenes Logfile nötig.
