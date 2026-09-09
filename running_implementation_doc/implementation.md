@@ -13,7 +13,7 @@ Linux nicht.
 Ziel: Ein eigener, kleiner Dienst entscheidet anhand der aktuellen Netzwerkverbindung,
 ob der `urbackupclientbackend`-Dienst laufen darf, und startet/stoppt ihn entsprechend.
 Zusätzlich übernimmt er, weil er ohnehin den Zustand kennt, eine Desktop-Status-
-anzeige per `notify`, die es für UrBackup unter Linux von Haus aus nicht gibt.
+anzeige per `notify`, die es für UrBackup unter Linux von Haus aus nicht gibt. Weiterhin soll dort per Button eine Detailanzeige des aktuellen Zustands als yad Popup implementiert werden.
 
 ## Dienstname
 
@@ -53,27 +53,45 @@ zu sein, prüft und erzwingt `urbackup-gated` bei **jedem eigenen Start** erneut
 Ersteinrichtung. Damit repariert sich der Zustand spätestens bei der nächsten
 Anmeldung nach einer Neuinstallation von selbst.
 
-## Entscheidungsregel
+## Entscheidungsregeln
 
-- Ethernet-Verbindung vorhanden → UrBackup darf immer laufen.
-- WLAN-Verbindung vorhanden → UrBackup darf nur laufen, wenn die aktuelle SSID auf
-  einer konfigurierten Erlaubnisliste steht.
-- Weder Ethernet noch eine erlaubte WLAN-SSID → UrBackup wird gestoppt/bleibt gestoppt.
-- Sind mehrere Interfaces gleichzeitig aktiv (z. B. Docking-Ethernet und WLAN
-  parallel), reicht eine einzige qualifizierende Verbindung, damit gestartet wird.
+Bewertet werden **alle gleichzeitig aktiven physischen Verbindungen**, nicht nur eine ausgewählte:
+
+- Irgendeine aktive WLAN-Verbindung, deren SSID **nicht** auf der Erlaubnisliste steht → verboten. Läuft der UrBackup-Client, wird er gestoppt; läuft er nicht, wird er nicht gestartet. Das gilt auch dann, wenn parallel eine Ethernet-Verbindung besteht.
+- Sonst, sofern mindestens eine aktive Verbindung vorhanden ist (Ethernet, oder WLAN mit erlaubter SSID) → erlaubt. Läuft der Client nicht, wird er gestartet; läuft er, läuft er weiter.
+- Gar keine aktive Netzwerkverbindung → **keine** Entscheidung, der Client bleibt in seinem aktuellen Zustand: gestoppt oder laufend.
+
+Die so ermittelte Erlaubnis ist nur die eine Hälfte; sie wird mit dem manuellen Nutzer-Zustand verundet (siehe „Manuelles Aktivieren und Deaktivieren").
+
+**Warum diese bewusst strenge Form, und was sie ersetzt:** Das eigentliche Risiko ist, dass die Verbindung zum Server über eine volumenbeschränkte WLAN-Verbindung läuft, obwohl parallel ein unbeschränkter Kanal online ist — Routing-Entscheidungen sind von außen nicht zuverlässig vorhersagbar. Der naheliegende Weg wäre, per Routing-Abfrage zu ermitteln, über welches Interface der konfigurierte UrBackup-Server tatsächlich erreicht wird. Dieser Weg ist verworfen: Er verlangt die Serveradresse, deren Namensauflösung und — sobald der Weg durch einen Tunnel führt — die Ermittlung des physischen Interfaces unter dem Tunnel, was als Nutzer ohne weitere Root-Rechte nicht möglich ist. Die konservative Regel oben erreicht dasselbe Schutzziel ohne jede dieser drei Voraussetzungen.
+
+**Preis dieser Entscheidung, ausdrücklich benannt:** Sind Ethernet und ein fremdes WLAN gleichzeitig aktiv (typisch an einer Dockingstation), wird nicht gesichert, obwohl es gefahrlos möglich wäre. Abhilfe ist dann, das WLAN abzuschalten. Umgekehrt gilt: Ob über eine erlaubte Verbindung tatsächlich Internet bzw. der Server erreichbar ist, wird nicht eigens geprüft — ein gestarteter Client, der den Server nicht erreicht, wartet einfach, und das ist ungefährlich.
+
+**Ausdrücklich nicht betrachtete Sonderfälle:** Auswertung des tatsächlichen Routings, Namensauflösung der Serveradresse und die Frage, über welches physische Interface ein VPN-Tunnel verläuft. Öffnet der Nutzer selbst ein VPN, entscheidet er selbst, ob er die Sicherung abschaltet; ist der VPN-Zugang seinerseits ein Access Point, greift wieder die Erlaubnisliste. Das ist keine Auslassung, sondern eine Abgrenzung: Diese Fälle sind unüblich und ihre Behandlung würde zusätzliche Root-Rechte verlangen.
+
+## Manuelles Aktivieren und Deaktivieren
+
+Neben der Netz-Erlaubnis gibt es einen **zweiten, davon unabhängigen Zustand**: die manuelle Freigabe durch den Nutzer. Beide werden **verundet** — gesichert wird nur, wenn das Netz passt **und** der Nutzer nicht deaktiviert hat.
+
+- Der Zustand wird bei **jedem Dienststart** auf „aktiviert" gesetzt. „Nicht deaktiviert" ist also der Normalfall, genau wie zum Dienststart.
+- Er wird **nicht persistiert** und lebt nur im Speicher des laufenden Dienstes (und als Anzeigefeld im vollständigen Status, siehe `state.json`). Dass ein manuelles „Deaktiviert" spätestens beim nächsten Dienststart verfällt, ist gewollt: Das Werkzeug arbeitet auf Rechnern, die nicht durchlaufen, also spätestens am nächsten Tag wieder anlaufen — und bis dahin erinnern die Zwei-Stunden-Meldungen daran.
+- Der manuelle Zustand kann die Netzregel in **keiner** Richtung übergehen. „Aktivieren" heißt nicht „jetzt trotzdem sichern", sondern nur „meinen Einspruch zurückziehen"; ist das Netz nicht erlaubt, bleibt gestoppt. Andernfalls wäre genau die Lücke offen, die dieser Dienst schließen soll.
+
+**Zwei Bedienwege, ein Mechanismus:** Sowohl der Notification-Button als auch das Kommandozeilenwerkzeug schreiben in eine **Kommandodatei unter `/run/urbackup-gated/`**, die der Dienst per inotify beobachtet — dasselbe Verfahren, das für die Netzwerk-Ereigniserkennung ohnehin schon festgelegt ist (siehe „Netzwerk-Ereigniserkennung"). Kein zusätzliches Übertragungsverfahren, und die Wirkung tritt sofort ein statt erst beim nächsten Zeittakt.
+
+**Invariante: absolutes Setzen, kein Umschalten.** Die beiden Befehle lauten „setze auf deaktiviert" bzw. „setze auf aktiviert", niemals „kippe den aktuellen Zustand". Grund: Ein Notification-Aufruf blockiert bis zum Klick oder Timeout, zwischen Anzeige und Klick können Minuten liegen, und in dieser Zeit kann der Zustand über den anderen Bedienweg schon verändert worden sein. Beim absoluten Setzen ist ein solcher verspäteter Klick wirkungsgleich mit einem sofortigen (idempotent); ein Umschalter hingegen würde den zwischenzeitlich gesetzten Zustand unbeabsichtigt kippen.
 
 ## Auslösepunkte (Trigger)
 
 1. Dienststart selbst (führt sofort eine volle Netzwerkprüfung durch).
-2. Verbindungsauf-/-abbau (event-getrieben, z. B. über NetworkManager-Dispatcher).
+2. Verbindungsauf-/-abbau (event-getrieben, z. B. über NetworkManager-Dispatcher) per Ethernet- oder WLAN-Device. (Auf- und Abbau von VPN-Verbindungen werden nicht überwacht bzw. ausgewertet.)
 3. Zeitgesteuert alle 30 Sekunden (Fallback, falls ein Event verpasst wird) — bei
-   diesem Trigger und beim Dienststart wird die Netzwerkverbindung zusätzlich aktiv
+   diesem Trigger und beim Dienststart werden die Netzwerkverbindungen zusätzlich aktiv
    geprüft (nicht nur der zuletzt gemeldete Event-Zustand).
 
 ## Verhalten bei Netzwechsel während laufender Sicherung
 
-Wechselt die WLAN-SSID während einer aktiven Sicherung ins Verbotene oder
-entfällt die Verbindung ganz (z. B. Wechsel vom erlaubten Netz zum
+Wechselt die WLAN-SSID während des gestarteten UrBackup-Clients ins Verbotene (z. B. Wechsel vom erlaubten Netz zum
 Handy-Hotspot), stoppt `urbackup-gated` sofort — nicht erst nach Ende der
 laufenden Sicherung. Reine Sicherheitsfrage fürs mobile Datenvolumen: Eine
 100-GB-Sicherung „zu Ende laufen zu lassen" könnte das Datenlimit im Zweifel
@@ -87,9 +105,11 @@ abzubrechen, gibt es ohnehin nicht: `urbackupclientctl` kennt ausschließlich
 `add-backupdir`, `list-backupdirs`, `remove-backupdir` — kein `stop`/`abort`/
 `pause` (verifiziert per `--help`). Der Dienst-Stopp ist damit nicht nur die
 gewählte, sondern die einzige clientseitig überhaupt vorhandene Option.
-UrBackup nimmt eine so unterbrochene Sicherung später von selbst wieder auf,
+UrBackup nimmt eine so unterbrochene Sicherung später nach Neustart von selbst wieder auf,
 wie wir bei der Fehlersuche am eigentlichen UrBackup-Client mehrfach
 beobachtet haben.
+
+**Warum wir gegen häufiges Stoppen und Starten trotzdem keine eigene Entprellung einbauen:** Ein Neustart des Clients ist nicht billig — er scannt zunächst die Dateibestände, was auf diesem Rechner über 20 Minuten dauert. Bei schlechtem Empfang oder ständigem Wechsel zwischen erlaubtem Netz und Hotspot könnte es dadurch nie zu einer wirklichen Sicherung kommen. Eine Mindest-Verweildauer im eigenen Dienst ist dafür aber unnötig: Der UrBackup-Client bringt selbst eine konfigurierbare Startverzögerung mit (auf diesem Rechner 5 Minuten), bevor er überhaupt tätig wird, und fängt das Flattern damit schon ab. Wer mehr Ruhe braucht, erhöht diesen Wert in UrBackup — ohne dass `urbackup-gated` etwas dazu beitragen muss.
 
 ## Zustand, Merken zwischen Aufrufen und Statusabfrage
 
@@ -100,24 +120,28 @@ bei jedem Neustart automatisch geleert — das erfüllt genau den gewünschten Z
 auffindbaren Namen leichter zu debuggen als eine zufällige UUID-Datei.
 
 **Festgelegt:** Dort wird nicht nur der reine Boot-Merker abgelegt, sondern der
-**vollständige Status** — erkannte Netzwerklage (Ethernet ja/nein, aktive SSID),
+**vollständige Status** — erkannte Netzwerklage (alle aktiven Verbindungen mit Typ und, bei WLAN, SSID),
 getroffene Entscheidung samt Begründung, sowie der UrBackup-Client-Status
 (`urbackupclientctl status`, s. u.). Es gibt dafür genau eine Backend-Funktion
 „vollständigen Status ermitteln/aufbereiten", die von drei Stellen verwendet wird:
 
 1. **Der Dienst selbst** — ruft sie bei jedem Trigger (Start, Netzwechsel,
    30-Sekunden-Takt) auf und schreibt das Ergebnis nach `state.json`.
-2. **Das Zenity-Detailfenster** beim Notify-Klick (s. u.) — ruft dieselbe
+2. **Das Yad-Detailfenster** beim Notify-Klick (s. u.) — ruft dieselbe
    Funktion live neu auf, da es im selben Prozess läuft; kein Umweg über die
    Datei nötig, dadurch tagesaktuellster Stand.
-3. **Ein separates Kommandozeilen-Statuswerkzeug** (löst die „Testbarkeit"-Frage
-   aus dem Konzept) — liest nur `state.json` und zeigt sie lesbar an, ohne
-   selbst etwas neu zu ermitteln. Dadurch höchstens rund 30 Sekunden alt
-   (Zeittrigger-Intervall), aber ohne eigene Berechtigungen/Logik-Duplizierung.
+3. **Ein separates Kommandozeilenwerkzeug** (löst die „Testbarkeit"-Frage
+   aus dem Konzept) — liest für die Statusanzeige nur `state.json` und zeigt sie lesbar an, ohne
+   selbst etwas neu zu ermitteln. Zeigt dabei an, wie lange das letzte Schreiben der Datei her ist. Dadurch höchstens rund 30 Sekunden alt
+   (Zeittrigger-Intervall), wenn der Dienst läuft, aber ohne eigene Berechtigungen/Logik-Duplizierung bezüglich des Inhalts, der Bewertung usw.
    Ersetzt die ursprünglich angedachte separate Dry-Run-Logik: Ein eigener
    Entscheidungs-Simulator wäre nötig gewesen, wenn der Dienst selbst befragt
    werden sollte, ohne dass er läuft — da er aber ohnehin läuft, reicht das
    Auslesen seines echten, aktuellen Zustands.
+
+Das Kommandozeilenwerkzeug hat damit **zwei Rollen und entsprechend Unterbefehle**: Status lesen (rein lesend, wie oben beschrieben) sowie manuelles Aktivieren/Deaktivieren (schreibend, über die Kommandodatei — siehe „Manuelles Aktivieren und Deaktivieren"). Auch der schreibende Weg enthält keine eigene Entscheidungslogik: Er setzt nur den Nutzer-Zustand, bewertet wird ausschließlich im Dienst.
+
+Der manuelle Nutzer-Zustand ist Teil des vollständigen Status und wird in `state.json` mitgeführt — sonst könnte weder das Statuswerkzeug noch das Detailfenster anzeigen, warum gerade nicht gesichert wird.
 
 Die eigentliche Ermittlungslogik existiert damit nur ein einziges Mal im Code.
 
@@ -125,11 +149,16 @@ Die eigentliche Ermittlungslogik existiert damit nur ein einziges Mal im Code.
 
 - Beim tatsächlichen Starten des UrBackup-Clients.
 - Beim tatsächlichen Stoppen des UrBackup-Clients.
-- Bei Zustandswechsel "Sicherung aktiv" ↔ "Sicherung inaktiv" (erkannt bei den
+- Bei Zustandswechsel "UrBackup-Server verbunden" ↔ "UrBackupserver nicht verbunden" (im laufenden Betrieb erkannt bei den
   Zeittriggern).
-- Wenn keine Sicherung läuft: alle 2 Stunden (bei einem der Zeittrigger) eine kurze
-  Meldung, ob eine Verbindung zum Server besteht.
-- Wenn eine Sicherung läuft: alle 15 Minuten ein kurzer Fortschrittsstatus.
+- Bei Zustandswechsel "Sicherung läuft nicht" ↔ "Sicherung läuft" (im laufenden Betrieb erkannt bei den
+  Zeittriggern).
+- Wenn keine Sicherung läuft: alle 2 Stunden (bei einem der Zeittrigger; Zeit konfigurierbar) eine kurze
+  Meldung, ob eine Verbindung zum UrBackup-Server besteht. Wird nicht gesichert, nennt diese Meldung
+  ausdrücklich den **Grund** — „manuell deaktiviert" gegenüber „Netz nicht erlaubt" gegenüber „keine
+  Netzwerkverbindung". Ohne diese Unterscheidung wäre für den Nutzer nicht erkennbar, ob er selbst
+  abgeschaltet hat und es nur vergessen hat, oder ob die Netzlage den Betrieb verhindert.
+- Wenn eine Sicherung läuft: alle 15 Minuten (konfigurierbar) ein kurzer Fortschrittsstatus.
 - Anzeigedauer 5 Sekunden, konfigurierbar.
 
 Datenquelle für Serververbindung/Sicherungsfortschritt: `urbackupclientctl status`
@@ -156,21 +185,22 @@ Datenquelle für Serververbindung/Sicherungsfortschritt: `urbackupclientctl stat
 
 ### Klickbare Notification mit Detailanzeige
 
-Live getestet (Skript `notify_click_test.py`, danach entfernt) und
-bestätigt funktionsfähig: `notify-send -A "default=..." -A "details=..."`
-zeigt auf diesem Desktop tatsächlich einen klickbaren Button, und die
+Live getestet und bestätigt funktionsfähig: `notify-send -A "default=..." -A "details=..."`
+zeigt auf diesem Desktop (KDE/Plasma/X11) tatsächlich einen klickbaren Button, und die
 gewählte Aktion kommt als Text auf stdout beim aufrufenden Prozess an — ganz
 ohne eigene D-Bus-Anbindung. Klickt man auf „Details", öffnet derselbe
-Prozess im Anschluss `zenity --info`/`--text-info` mit dem vollständigen
+Prozess im Anschluss `yad` mit dem vollständigen
 `urbackupclientctl status`. Es gibt keine unabhängige Verbindung zwischen
-Notify-Klick und Zenity — der aufrufende Prozess blockiert (`--action`
+Notify-Klick und Yad — der aufrufende Prozess blockiert (`--action`
 impliziert `--wait`), bekommt die Klick-Antwort direkt zurück und entscheidet
-im selben Ablauf, ob er Zenity startet.
+im selben Ablauf, ob er Yad startet.
 
 Konsequenz für die Umsetzung: Da dieser Aufruf blockiert, darf er nicht in
 der Haupt-Schleife des Dienstes laufen (sonst steht die 30-Sekunden-Prüfung
 still, solange eine Notification unbeantwortet auf dem Bildschirm hängt) —
 er muss in einem eigenen Thread/Hintergrundprozess erfolgen.
+
+**Button-Belegung jeder Meldung:** `Details` ist immer vorhanden. Dazu kommt genau einer der beiden Schaltbefehle, abhängig vom aktuellen manuellen Nutzer-Zustand — `deactivate`, solange der Nutzer nicht deaktiviert hat, und `activate`, wenn er deaktiviert hat (siehe „Manuelles Aktivieren und Deaktivieren"). Da die periodischen Meldungen ohnehin regelmäßig erscheinen (bei laufender Sicherung alle 15 Minuten), ist damit auch ohne Kommandozeile jederzeit eine Bedienmöglichkeit vorhanden.
 
 Die ursprüngliche Sorge, ein klickbarer Button könnte die gewünschten 5
 Sekunden Anzeigedauer unterlaufen, hat sich als unbegründet erwiesen: Live
@@ -215,7 +245,7 @@ einmalige Meldung, kein Live-Update nötig).
 **Weitere Festlegungen zu diesem Fenster:**
 
 - **Aktualisierungstakt:** im Rahmen der bestehenden 30-Sekunden-Zeitscheibe
-  des Dienstes, aber auf ca. 5 Sekunden verkürzt, solange dieses Fenster
+  des Dienstes, aber diese Zeitscheibe auf 5 Sekunden verkürzt (konfigurierbar), solange dieses Fenster
   offen ist.
 - **Schließen erkennen:** über die fehlschlagende Schreiboperation auf die
   dann geschlossene Pipe (Broken Pipe) — einfachstes, übliches Verfahren,
@@ -233,17 +263,16 @@ werden, analog zum früheren `urbackup-gated-test.service`-Testaufbau.
 
 ## Konfiguration
 
-Eigene Datei/Ordner: `/etc/urbackup-gated`. Muss mindestens enthalten: Liste
-erlaubter SSIDs, Anzeigedauer der Notify-Meldungen, ggf. die beiden Intervalle
-(2 h / 15 min), falls sie einstellbar sein sollen statt fest im Code.
+Eigene Datei/Ordner: `/etc/urbackup-gated` (wenn es bei einer Datei bleibt, reicht die Konfigurationsdatei `/etc/urbackup-gated.conf`, andernfalls kommen die Files in einen Ordner `/etc/urbackup-gated`). Muss mindestens enthalten: Liste
+erlaubter SSIDs, konfigurierbare Zeiten / Intervalle, soweit sie einstellbar sein sollen statt fest im Code.
 
 Aktuell genannte SSIDs: `lieluX`, `lielux`, `lieluxVPN`, `HZDR` — geklärt: kein
 Tippfehler, `lieluX` und `lielux` sind zwei tatsächlich unterschiedliche, echte
-Netze. Vergleich bleibt case-sensitiv.
+Netze. Vergleich bleibt case-sensitiv. Diese SSIDs werden schon im Repo als Beispiel so benutzt.
 
 ### Fail-safe bei fehlender/kaputter Konfiguration
 
-Fehlt `/etc/urbackup-gated`, ist sie nicht lesbar oder inhaltlich fehlerhaft
+Fehlt `/etc/urbackup-gated` als Ordner bzw. Konfigurationsdatei, ist sie nicht lesbar oder inhaltlich fehlerhaft
 (z. B. keine gültige SSID-Liste), bleibt `urbackupclientbackend` **gestoppt**
 bzw. wird gestoppt — unabhängig davon, welches Netz gerade aktiv ist. Sicherer
 Default: eine verpasste Sicherungsgelegenheit ist unkritisch, eine ungeprüft
@@ -252,7 +281,7 @@ das Risiko, das der Dienst verhindern soll.
 
 Keine eigene Notify-Meldung für diesen Fall — der Nutzer erkennt den
 Fehlzustand indirekt am Ausbleiben der gewohnten Verbindungs-/
-Sicherungsmeldungen. Stattdessen ein **Zenity-Fehlerfenster** mit der
+Sicherungsmeldungen. Stattdessen ein **Yad-Fehlerfenster** mit der
 konkreten Fehlerursache, das per Klick auf „OK" quittiert werden muss. Damit
 weiß der Nutzer gezielt, was kaputt ist, und kann `urbackupclientbackend` im
 Zweifel manuell starten, statt nur zu bemerken, dass „nichts mehr kommt".
@@ -261,7 +290,7 @@ Zweifel manuell starten, statt nur zu bemerken, dass „nichts mehr kommt".
 
 Festgelegt: normale Ausgabe auf stdout/stderr, kein eigenes Logfile. Landet
 dadurch automatisch im systemd-Journal (`journalctl --user -u urbackup-gated`)
-und braucht keine eigene Rotation/Aufräumlogik.
+und braucht keine eigene Rotation/Aufräumlogik. Fehleranzeige bei `systemctl status urbackup-gated`.
 
 ## Technische Bausteine
 
@@ -297,6 +326,8 @@ nötig.
 Festgelegt: **`nmcli`** per Subprozess, mit `-t` (terse, maschinenlesbares
 Format) und `-f` (gezielte Felder, z. B. `TYPE,STATE,CONNECTION`) — passend
 zum bisherigen Muster bei Notify.
+
+Abgefragt wird nicht die primäre Verbindung, sondern **die vollständige Liste aller aktiven Verbindungen**, je Eintrag mit Typ (Ethernet/WLAN/sonstiges) und, bei WLAN, der SSID. Das folgt zwingend aus den Entscheidungsregeln: Eine einzige aktive, nicht erlaubte WLAN-Verbindung verbietet den Betrieb, auch wenn sie nicht die primäre Verbindung ist. Eine Abfrage, die nur die primäre Verbindung liefert, wäre für diese Regel unbrauchbar.
 
 Sprachabhängigkeit der Ausgabe ist damit vollständig beseitigt, nicht nur
 verringert: Laut `nmcli`-Handbuch, Abschnitt „INTERNATIONALIZATION NOTES",
