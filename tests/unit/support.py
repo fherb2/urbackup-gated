@@ -10,6 +10,7 @@ import os
 import shutil
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -23,6 +24,26 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from urbackup_gated import client, config, runtime  # noqa: E402
 
 ALLOWED_SSIDS = ["lieluX", "home-net"]
+
+
+def ensure_watchdog() -> None:
+    """Make urbackup_gated.daemon importable without the watchdog package.
+
+    The daemon needs watchdog to observe the trigger directory; the reporting
+    logic under test does not, and stage 1 promises to run without extra
+    packages. Where the real package is installed it is left alone.
+    """
+    try:
+        import watchdog.events  # noqa: F401
+        import watchdog.observers  # noqa: F401
+    except ImportError:
+        events = types.ModuleType("watchdog.events")
+        events.FileSystemEventHandler = object
+        observers = types.ModuleType("watchdog.observers")
+        observers.Observer = object
+        sys.modules.setdefault("watchdog", types.ModuleType("watchdog"))
+        sys.modules["watchdog.events"] = events
+        sys.modules["watchdog.observers"] = observers
 
 _CONFIG_TEMPLATE = """allowed_ssids = {ssids}
 

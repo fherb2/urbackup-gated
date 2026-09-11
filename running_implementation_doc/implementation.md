@@ -219,6 +219,8 @@ Die eigentliche Ermittlungslogik existiert damit nur ein einziges Mal im Code.
 - Wenn eine Sicherung läuft: alle 15 Minuten (konfigurierbar) ein kurzer Fortschrittsstatus.
 - Anzeigedauer 5 Sekunden, konfigurierbar.
 
+**Ein dritter Zustand, der keinen Wechsel auslöst:** Antwortet `urbackupclientctl status` nicht verwertbar — der Regelfall, sobald der Client-Dienst gestoppt ist —, sind Serververbindung und Sicherungslauf nicht „nein", sondern **unbekannt**. Unbekannt ist keiner der beiden Zustände, zwischen denen die obigen Wechselmeldungen unterscheiden; der Übergang in ihn hinein und aus ihm heraus wird deshalb nicht gemeldet. Ohne diese Festlegung folgt auf jeden netzbedingten Stopp im nächsten Takt eine Meldung über einen Serververlust, den es nicht gab — der Dienst hat den Client ja selbst angehalten. Der Preis ist ausdrücklich benannt: Nach einem Start des Clients entfällt die Folgemeldung „Server verbunden"; dass der Client gestartet wurde, steht bereits in der Meldung desselben Takts, und bleibt der Server unerreichbar, nennt das die Ruhemeldung.
+
 Datenquelle für Serververbindung/Sicherungsfortschritt: `urbackupclientctl status`
 (JSON-Ausgabe). **Geprüft:** Der Aufruf funktioniert mit reinen Benutzerrechten, ohne `sudo`. Das war nicht selbstverständlich und ist tragend für den Entwurf: Der Aufruf erfolgt bei jedem Zeittakt, also alle 30 bzw. 5 Sekunden. Hätte er Root-Rechte gebraucht, wäre eine dritte, sehr häufig genutzte `sudoers`-Freigabe nötig geworden — und die eng gefasste Rechteaufteilung (siehe „Systemintegration und Rechteaufteilung") bliebe bei genau zwei seltenen Befehlen nicht mehr bestehen.
 
@@ -371,7 +373,7 @@ Fallback, falls ein Event verpasst wird.
 
 **Zwei Eigenschaften der Überwachung, die nicht Feinheit, sondern Voraussetzung sind:**
 
-- Überwacht wird **das Verzeichnis, nicht die einzelne Datei.** Beide Trigger-Dateien werden atomar per `rename` ersetzt (s. „Manuelles Aktivieren und Deaktivieren"), und eine Überwachung, die an der Datei selbst hängt, verliert dabei stillschweigend ihr Ziel — sie beobachtet danach ein Objekt, das niemand mehr beschreibt, ohne dass ein Fehler auffällt. Eine Verzeichnisüberwachung deckt damit beide Dateien mit einem einzigen Beobachter ab.
+- Überwacht wird **das Verzeichnis, nicht die einzelne Datei.** Maßgeblich dafür ist die Kommandodatei: Sie wird atomar per `rename` ersetzt (s. „Manuelles Aktivieren und Deaktivieren"), und eine Überwachung, die an der Datei selbst hängt, verliert dabei stillschweigend ihr Ziel — sie beobachtet danach ein Objekt, das niemand mehr beschreibt, ohne dass ein Fehler auffällt. Für die Netzwerkdatei gilt das nicht: Der Dispatcher berührt sie nur, ihr Inode bleibt erhalten, und eine Dateiüberwachung täte es für sie allein. Die Verzeichnisüberwachung ist trotzdem der richtige Weg — für die Kommandodatei ist sie ohnehin zwingend, und sie deckt beide Dateien mit einem einzigen Beobachter ab.
 - Der Beobachter reagiert **ausschließlich auf die beiden bekannten Dateinamen** und ignoriert alles andere im Verzeichnis. Das ist zwingend, weil der Dienst seine `state.json` in dasselbe Verzeichnis schreibt: Ohne diesen Filter würde sein eigener Schreibvorgang die eigene Überwachung auslösen, diese eine neue Bewertung anstoßen und die wieder schreiben — eine Endlosschleife im Sekundentakt.
 
 Begründung gegenüber den Alternativen: Ein Unix-Signal an die Prozess-ID des
@@ -408,7 +410,9 @@ Die Prüfung ist in drei Stufen geteilt, weil sich die drei nach ihren Vorausset
 
 `tests/run-unit.sh`, ohne root, ohne Container, ohne zusätzliche Pakete (`unittest` aus der Standardbibliothek). Statt `subprocess` wegzumocken liegen in `tests/unit/stubs/` Ersatzprogramme für `nmcli`, `urbackupclientctl`, `systemctl` und `sudo`, die über `PATH` bzw. über die Modulkonstanten vorgeschaltet werden und jeden Aufruf mitschreiben — geprüft wird damit die **tatsächlich gebaute Kommandozeile**, nicht eine Attrappe davon. Die nmcli-Ausgaben liegen als echte Beispieldateien unter `tests/unit/scenarios/`, je Szenario ein Ordner.
 
-Abgedeckt: die vollständige Entscheidungsmatrix, das Zerlegen der nmcli-Ausgabe samt Escaping, die Konfigurationsprüfung mit ihren Ablehnungen, die Flag-Semantik samt atomarem Schreiben, das Parsen des Client-Status in beiden Ausgabeformen und die Textaufbereitung.
+Abgedeckt: die vollständige Entscheidungsmatrix, das Zerlegen der nmcli-Ausgabe samt Escaping, die Konfigurationsprüfung mit ihren Ablehnungen, die Flag-Semantik samt atomarem Schreiben, das Parsen des Client-Status in beiden Ausgabeformen, die Textaufbereitung und die Meldelogik des Dienstes — welcher Zustandswechsel eine Meldung auslöst und welcher nicht (s. „Ein dritter Zustand, der keinen Wechsel auslöst").
+
+Die Meldelogik liegt im Dienstmodul, das für die Verzeichnisüberwachung `watchdog` braucht. Damit Stufe 1 ihre Zusage „ohne zusätzliche Pakete" hält, setzt die Testunterstützung dafür Platzhalter ein, solange das Paket fehlt, und benutzt das echte, sobald es installiert ist — geprüft wird so oder so der unveränderte Dienstcode, denn die Meldelogik rührt `watchdog` nicht an.
 
 Dass die Tests wirklich greifen, ist selbst geprüft: Sieben absichtlich eingebaute Fehler — Ethernet hebelt verbotenes WLAN aus, Nutzer-Einspruch wird ignoriert, Profilname statt SSID, WLAN-Scan nicht mehr unterdrückt, `running_processes` nicht mehr gelesen, Loopback zählt als Verbindung, Zeitstempel ohne Zeitzone — wurden alle sieben erkannt.
 

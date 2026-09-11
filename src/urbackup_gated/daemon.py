@@ -30,6 +30,17 @@ class _TriggerHandler(FileSystemEventHandler):
             self._wake.set()
 
 
+def _known_change(previous: bool | None, current: bool | None) -> bool:
+    """True only for a transition between two known values.
+
+    An unreachable backend leaves the client flags unknown rather than false,
+    and unknown is neither of the two states the notification rules name.
+    Without this guard every gated stop is followed one tick later by a message
+    about a lost server connection that never happened.
+    """
+    return previous is not None and current is not None and previous != current
+
+
 class Daemon:
     def __init__(self, config: Config) -> None:
         self._config = config
@@ -152,7 +163,7 @@ class Daemon:
             return
 
         if previous is not None:
-            if client_view["server_connected"] != previous["server_connected"]:
+            if _known_change(previous["server_connected"], client_view["server_connected"]):
                 connected = client_view["server_connected"]
                 self._notify(
                     "UrBackup server connected" if connected else "UrBackup server lost",
@@ -160,7 +171,7 @@ class Daemon:
                     status,
                 )
                 return
-            if client_view["backup_running"] != previous["backup_running"]:
+            if _known_change(previous["backup_running"], client_view["backup_running"]):
                 summary, body = state.notify_summary(status)
                 self._notify(summary, body, status)
                 return

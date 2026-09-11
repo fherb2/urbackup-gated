@@ -75,9 +75,11 @@ urbackup-gated-ctl deactivate    # stop backing up until further notice
 urbackup-gated-ctl activate      # withdraw that
 ```
 
-The same two commands are available as buttons on every notification, next to a
-`Details` button that opens the live status window. That window may be left
-open; it rewrites itself and suppresses notifications while it is up.
+Every notification carries a `Details` button that opens the live status window,
+and beside it whichever one of those two switches applies right now:
+`Deactivate` while backups are allowed, `Activate` once you have turned them
+off. That window may be left open; it rewrites itself and suppresses
+notifications while it is up.
 
 Logs go to the journal:
 
