@@ -4,10 +4,15 @@
 # Needs a working docker daemon and privileged mode: the tests exercise real
 # systemd units, so systemd has to run as PID 1 inside the container. Nothing
 # on the host is touched - the repository is mounted read-only.
+#
+# The image is deleted again afterwards, because it is several hundred megabytes
+# that are of no use between runs. Set KEEP_IMAGE=1 to keep it, which saves the
+# download and the build when the next run follows soon.
 set -euo pipefail
 
 IMAGE=urbackup-gated-tests
 CONTAINER=urbackup-gated-tests-run
+KEEP_IMAGE=${KEEP_IMAGE:-0}
 
 REPO=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 
@@ -21,7 +26,14 @@ echo "== building $IMAGE"
 docker build -t "$IMAGE" -f "$REPO/tests/container/Dockerfile" "$REPO/tests/container"
 
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
-cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
+cleanup() {
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    if [ "$KEEP_IMAGE" = 1 ]; then
+        echo "== keeping image $IMAGE (KEEP_IMAGE=1)"
+    else
+        docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
+    fi
+}
 trap cleanup EXIT
 
 echo "== starting $CONTAINER"

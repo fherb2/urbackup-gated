@@ -35,7 +35,9 @@ runs even though it would be safe. Switch the wifi off in that case.
 
 - The UrBackup client, providing `urbackupclientbackend.service`
 - Python 3.11 or newer, and `python3-watchdog`
-- `yad`, `libnotify-bin`, NetworkManager (`nmcli`)
+- NetworkManager (`nmcli`)
+- `yad` and `libnotify-bin` - rarely present already, so the installer offers to
+  install them for you rather than sending you away
 - A desktop session; this is a per-user service and runs only while logged in
 
 ## Installation
@@ -45,6 +47,10 @@ sudo ./install.sh
 ```
 
 This installs for the user who invoked `sudo`; pass a user name to override it.
+If `yad` or `notify-send` is missing, the installer names the package and asks
+before installing it; declining stops the installation before anything has been
+written. Pass `--yes` to answer that question in advance, for unattended runs.
+
 Then review the allow list in `/etc/urbackup-gated.conf`, which is the one
 setting you have to get right:
 

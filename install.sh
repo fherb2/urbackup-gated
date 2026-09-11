@@ -1,10 +1,13 @@
 #!/bin/bash
 # Install urbackup-gated for one user.
 #
-# Usage: sudo ./install.sh [user]
+# Usage: sudo ./install.sh [--yes] [user]
 #
 # The user defaults to the one who invoked sudo. urbackup-gated is a per-user
 # service: it runs in that user's session, and only that user may steer it.
+#
+# --yes answers the question about missing runtime packages with yes, for
+# unattended runs such as the container tests.
 set -euo pipefail
 
 LIB_DIR=/usr/local/lib/urbackup-gated
@@ -28,7 +31,45 @@ need() {
     command -v "$1" >/dev/null 2>&1 || die "$1 is required but not installed${2:+ ($2)}"
 }
 
+# What is asked for here is not a privilege - the installer already runs as root
+# - but the user's consent to put another package on their machine. The package
+# manager is called through PATH on purpose, so the container tests can put a
+# recording stand-in in front of it instead of really pulling GTK in.
+ensure_package() {
+    local program=$1 package=$2 answer=
+    command -v "$program" >/dev/null 2>&1 && return 0
+
+    echo
+    echo "$program is missing. urbackup-gated needs it; it comes with the package '$package'."
+    if [ "$ASSUME_YES" -ne 1 ]; then
+        printf 'Install %s now? [y/N] ' "$package"
+        # Braces so the shell's own complaint about a missing /dev/tty - the
+        # unattended case - is swallowed along with read's.
+        { read -r answer </dev/tty; } 2>/dev/null || answer=
+        case $answer in
+            [yY] | [yY][eE][sS]) ;;
+            *) die "$package is required - install it yourself and run install.sh again" ;;
+        esac
+    fi
+
+    echo "installing $package"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "$package" \
+        || die "could not install $package - install it yourself and run install.sh again"
+    command -v "$program" >/dev/null 2>&1 \
+        || die "$package was installed but $program is still not there"
+}
+
 [ "$(id -u)" -eq 0 ] || die "must run as root"
+
+ASSUME_YES=0
+while [ $# -gt 0 ]; do
+    case $1 in
+        --yes) ASSUME_YES=1; shift ;;
+        --) shift; break ;;
+        -*) die "unknown option: $1" ;;
+        *) break ;;
+    esac
+done
 
 SERVICE_USER=${1:-${SUDO_USER:-}}
 [ -n "$SERVICE_USER" ] || die "cannot tell which user to install for - pass it as an argument"
@@ -43,8 +84,6 @@ echo "Installing urbackup-gated for user $SERVICE_USER"
 # -- dependencies ------------------------------------------------------------
 
 need python3
-need yad "apt install yad"
-need notify-send "apt install libnotify-bin"
 need nmcli "part of network-manager"
 need systemd-tmpfiles
 need visudo
@@ -57,6 +96,12 @@ python3 -c 'import watchdog' 2>/dev/null \
 
 systemctl cat "$CLIENT_UNIT" >/dev/null 2>&1 \
     || die "$CLIENT_UNIT not found - install the UrBackup client first"
+
+# These two are rarely present on a desktop already, so they are offered rather
+# than demanded. Nothing has been written to the system at this point, so a
+# refusal leaves no half-installed state behind.
+ensure_package yad yad
+ensure_package notify-send libnotify-bin
 
 # -- python package ----------------------------------------------------------
 

@@ -54,12 +54,16 @@ section() { printf '\n== %s\n' "$1"; }
 mkdir -p "$TESTDIR"
 echo ethernet >"$TESTDIR/scenario"
 : >"$TESTDIR/notify-send.log"
+: >"$TESTDIR/apt-get.log"
 chmod 0777 "$TESTDIR"
-chmod 0666 "$TESTDIR/notify-send.log"
+chmod 0666 "$TESTDIR/notify-send.log" "$TESTDIR/apt-get.log"
 
 install -m 0644 "$SOURCE/tests/container/stubs/urbackupclientbackend.service" \
     /etc/systemd/system/"$CLIENT_UNIT"
-for stub in nmcli urbackupclientctl notify-send; do
+# apt-get is stubbed too: the image deliberately has no yad, so the installer's
+# offer to install it is what gets exercised. /usr/local/bin comes before
+# /usr/bin, and nothing after the image build needs the real apt-get.
+for stub in nmcli urbackupclientctl notify-send apt-get; do
     install -m 0755 "$SOURCE/tests/container/stubs/$stub" /usr/local/bin/"$stub"
 done
 systemctl daemon-reload
@@ -69,7 +73,26 @@ systemctl daemon-reload
 systemctl enable "$CLIENT_UNIT" >/dev/null 2>&1
 
 section "installation"
-check "install.sh succeeds" "$SOURCE/install.sh" "$SERVICE_USER"
+check_not "yad is absent to begin with" command -v yad
+check "install.sh succeeds" "$SOURCE/install.sh" --yes "$SERVICE_USER"
+
+grep -q 'install.*\byad\b' "$TESTDIR/apt-get.log" \
+    && ok "the installer offered and installed the missing yad" \
+    || no "the installer offered and installed the missing yad"
+check "yad is in place afterwards" command -v yad
+
+# Refusing the package must abort before anything is written. Without --yes and
+# without a terminal the read fails, which is the refusal case.
+rm -f /usr/local/bin/yad
+apt_calls_before=$(wc -l <"$TESTDIR/apt-get.log")
+check_not "install.sh stops when the package is refused" \
+    "$SOURCE/install.sh" "$SERVICE_USER"
+[ "$(wc -l <"$TESTDIR/apt-get.log")" = "$apt_calls_before" ] \
+    && ok "a refusal installs nothing" \
+    || no "a refusal installs nothing"
+# Put the dummy back, so the rest of the run sees a completed installation.
+printf '#!/bin/sh\nexit 0\n' >/usr/local/bin/yad
+chmod 0755 /usr/local/bin/yad
 
 check "daemon wrapper is executable" test -x /usr/local/bin/urbackup-gated
 check "control tool is executable" test -x /usr/local/bin/urbackup-gated-ctl
