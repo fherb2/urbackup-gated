@@ -68,6 +68,11 @@ for stub in nmcli urbackupclientctl notify-send apt-get; do
 done
 systemctl daemon-reload
 
+# NetworkManager itself is only faked by the nmcli stub, so the directory it
+# would otherwise bring along has to be faked too: install.sh drops its hook in
+# there and does not create parent directories.
+mkdir -p /etc/NetworkManager/dispatcher.d
+
 # The UrBackup installer enables its service unconditionally; urbackup-gated is
 # supposed to undo that.
 systemctl enable "$CLIENT_UNIT" >/dev/null 2>&1

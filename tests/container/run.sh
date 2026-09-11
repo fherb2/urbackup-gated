@@ -46,14 +46,22 @@ docker run -d --name "$CONTAINER" \
     -v "$REPO:/src:ro" \
     "$IMAGE" >/dev/null
 
-# A container is routinely "degraded" because some system units have nothing to
-# do here; only a hard failure to boot matters.
+# "docker run -d" returns once the container runs, not once systemd inside it
+# answers, so the first few attempts are expected to fail. A container is also
+# routinely "degraded" because some system units have nothing to do in here;
+# only a hard failure to boot matters, which is why dbus is the criterion.
+BOOT_TIMEOUT=60
+waited=0
+until docker exec "$CONTAINER" systemctl is-active --quiet dbus.service 2>/dev/null; do
+    waited=$((waited + 1))
+    if [ "$waited" -ge "$BOOT_TIMEOUT" ]; then
+        echo "systemd did not come up inside the container within ${BOOT_TIMEOUT}s" >&2
+        docker logs "$CONTAINER" >&2 || true
+        exit 1
+    fi
+    sleep 1
+done
 docker exec "$CONTAINER" systemctl is-system-running --wait >/dev/null 2>&1 || true
-if ! docker exec "$CONTAINER" systemctl is-active --quiet dbus.service; then
-    echo "systemd did not come up inside the container" >&2
-    docker logs "$CONTAINER" >&2 || true
-    exit 1
-fi
 
 echo "== running tests"
 docker exec "$CONTAINER" /src/tests/container/inside/run.sh
