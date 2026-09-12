@@ -273,6 +273,15 @@ check "an allowed wifi starts it again" wait_until 10 client_active
 check "the control tool accepts deactivate" as_user urbackup-gated-ctl deactivate
 check "manual deactivation stops the client" wait_until 10 client_inactive
 
+# Running it under sudo would leave a root-owned 0600 file that the daemon
+# cannot read, which it then reads as "deactivated" and complains about on every
+# tick. The file written by the user just above has to stay untouched.
+check_not "the control tool refuses to set the flag as root" \
+    urbackup-gated-ctl deactivate
+[ "$(stat -c %U "$RUNDIR/user-enabled")" = "$SERVICE_USER" ] \
+    && ok "the command file still belongs to the service user" \
+    || no "the command file still belongs to the service user"
+
 check "status tool succeeds" as_user urbackup-gated-ctl status
 as_user urbackup-gated-ctl status >"$TESTDIR/status.txt" 2>&1
 grep -q "manually deactivated" "$TESTDIR/status.txt" \

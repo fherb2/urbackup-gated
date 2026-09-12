@@ -8,6 +8,7 @@ understand instead of displaying it wrongly.
 import contextlib
 import io
 import json
+import os
 import unittest
 from datetime import datetime, timedelta, timezone
 
@@ -107,6 +108,26 @@ class ManualSwitch(support.StubbedCase):
         self.assertEqual(code, 0)
         self.assertTrue(runtime.read_user_enabled())
         self.assertIn("activated", out)
+
+    def test_root_is_refused_for_the_writing_way(self):
+        # sudo urbackup-gated-ctl deactivate is an easy slip: it leaves a
+        # root-owned 0600 file the daemon cannot read, reads as "deactivated",
+        # and complains on every tick without the cause being obvious.
+        self.patch(os, "geteuid", lambda: 0)
+        code, out, err = self._run(False)
+        self.assertEqual(code, 1)
+        self.assertIn("root", err)
+        self.assertEqual(out, "")
+        self.assertFalse(runtime.USER_ENABLED_FILE.exists())
+
+    def test_root_may_still_read_the_status(self):
+        # Reading harms nothing, so it stays allowed.
+        runtime.write_state(_document())
+        self.patch(os, "geteuid", lambda: 0)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertEqual(cli._status(), 0)
+        self.assertIn("last written", out.getvalue())
 
     def test_a_missing_runtime_directory_is_reported(self):
         self.patch(runtime, "RUNTIME_DIR", self.tmp / "nowhere")

@@ -1,6 +1,7 @@
 """Command line tool: read the status, or set the manual flag."""
 
 import argparse
+import os
 import sys
 from datetime import datetime
 
@@ -45,6 +46,19 @@ def _status() -> int:
 
 
 def _set_enabled(enabled: bool) -> int:
+    # Running this under sudo is an easy slip and an expensive one: the command
+    # file would end up owned by root with mode 0600, the daemon could not read
+    # it, would read that as "deactivated" and say so in the journal on every
+    # tick. It heals with the next call as the right user - but until then the
+    # machine does not back up and the reason is not obvious. Reading the status
+    # as root is harmless, so only this way out is refused.
+    if os.geteuid() == 0:
+        print(
+            "refusing to run as root: the flag belongs to the user the service "
+            "runs for. Run this without sudo.",
+            file=sys.stderr,
+        )
+        return 1
     try:
         runtime.check_directory()
         runtime.set_user_enabled(enabled)
