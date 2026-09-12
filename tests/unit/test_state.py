@@ -19,7 +19,7 @@ MATRIX = [
     ("forbidden_wifi", False, False, "not on the allow list"),
     ("ethernet_and_forbidden_wifi", False, False, "not on the allow list"),
     ("colon_ssid", False, False, "my:odd:net"),
-    ("wifi_name_mismatch", False, False, "not on the allow list"),
+    ("wifi_no_entry", False, False, "not on the allow list"),
     ("nothing", None, None, "no network connection"),
     ("nmcli_error", False, False, "network state unknown"),
 ]

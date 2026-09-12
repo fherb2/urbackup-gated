@@ -73,24 +73,31 @@ def _split_terse(line: str) -> list[str]:
     return fields
 
 
-def _active_ssids() -> set[str]:
+def _ssid_by_device() -> dict[str, str]:
+    """Map each associated wifi device to the SSID it is associated with.
+
+    The DEVICE field says outright which radio an entry belongs to. Inferring it
+    from the number of active entries, and falling back to the connection
+    profile name, was guesswork: a profile can be renamed to anything, including
+    the name of an allowed network.
+    """
     # --rescan no keeps this from triggering a wifi scan, which would otherwise
     # happen on every tick.
-    output = _run("-f", "ACTIVE,SSID", "device", "wifi", "list", "--rescan", "no")
-    ssids = set()
+    output = _run("-f", "ACTIVE,SSID,DEVICE", "device", "wifi", "list", "--rescan", "no")
+    by_device = {}
     for line in output.splitlines():
         if not line:
             continue
         fields = _split_terse(line)
-        if len(fields) >= 2 and fields[0] == "yes" and fields[1]:
-            ssids.add(fields[1])
-    return ssids
+        if len(fields) >= 3 and fields[0] == "yes" and fields[1] and fields[2]:
+            by_device[fields[2]] = fields[1]
+    return by_device
 
 
 def active_connections() -> tuple[Connection, ...]:
     """Return every connected device, with the SSID filled in for wifi."""
     output = _run("-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status")
-    ssids = None
+    by_device = None
     connections = []
     for line in output.splitlines():
         if not line:
@@ -110,11 +117,11 @@ def active_connections() -> tuple[Connection, ...]:
             continue
         ssid = None
         if kind == WIFI:
-            if ssids is None:
-                ssids = _active_ssids()
-            # With a single wifi device the active SSID is unambiguous. The
-            # profile name is not used as a fallback: it can be renamed freely
-            # and would then silently pass the allow list.
-            ssid = next(iter(ssids)) if len(ssids) == 1 else (name if name in ssids else None)
+            if by_device is None:
+                by_device = _ssid_by_device()
+            # Staying None is a real answer, not a gap: a device running its own
+            # access point is connected but has no entry of its own. Unknown
+            # counts as forbidden, which is the direction we want.
+            ssid = by_device.get(device)
         connections.append(Connection(device=device, kind=kind, name=name, ssid=ssid))
     return tuple(connections)

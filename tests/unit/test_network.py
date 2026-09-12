@@ -54,10 +54,17 @@ class WifiConnections(support.StubbedCase):
     scenario = "allowed_wifi"
 
     def test_ssid_comes_from_the_radio_not_the_profile_name(self):
+        # The profile is named something else on purpose: a profile can be
+        # renamed to anything, including the name of an allowed network.
         connection = network.active_connections()[0]
         self.assertEqual(connection.kind, network.WIFI)
         self.assertEqual(connection.name, "home profile")
         self.assertEqual(connection.ssid, "lieluX")
+
+    def test_the_entry_is_matched_by_device(self):
+        network.active_connections()
+        wifi_call = next(call for call in self.calls("nmcli") if "wifi" in call)
+        self.assertIn("DEVICE", wifi_call)
 
     def test_scan_is_suppressed(self):
         network.active_connections()
@@ -72,13 +79,28 @@ class ColonInSsid(support.StubbedCase):
         self.assertEqual(network.active_connections()[0].ssid, "my:odd:net")
 
 
-class AmbiguousWifi(support.StubbedCase):
-    scenario = "wifi_name_mismatch"
+class WifiWithoutAnEntryOfItsOwn(support.StubbedCase):
+    """A connected radio the scan list does not mention - an own access point."""
 
-    def test_unresolvable_ssid_stays_unknown(self):
-        # Two active SSIDs and a profile name matching neither: guessing here
-        # would be the one mistake that lets a metered network pass.
+    scenario = "wifi_no_entry"
+
+    def test_the_ssid_stays_unknown(self):
         self.assertIsNone(network.active_connections()[0].ssid)
+
+
+class TwoWifiDevices(support.StubbedCase):
+    """Only one of the two radios has an entry of its own.
+
+    Inferring the SSID from the number of active entries handed that one entry
+    to both devices - so a second radio, whose association nobody can see, was
+    credited with an allowed network. The DEVICE field settles it outright.
+    """
+
+    scenario = "two_wifi_devices"
+
+    def test_each_radio_gets_its_own_entry_and_no_other(self):
+        by_device = {c.device: c.ssid for c in network.active_connections()}
+        self.assertEqual(by_device, {"wlp0s20f3": "lieluX", "wlan1": None})
 
 
 class ExternallyConnected(support.StubbedCase):
