@@ -463,6 +463,8 @@ beobachtet sie per inotify (z. B. Python-`watchdog`) und löst darauf sofort
 eine Prüfung aus. Dazu weiterhin der 30-Sekunden-Timer im Dienst selbst als
 Fallback, falls ein Event verpasst wird.
 
+**Auf welche Aktionen der Hook reagiert, ist Festlegung und nicht Geschmack:** `up`, `down`, `dhcp4-change`, `dhcp6-change` und `connectivity-change`. Alles andere lässt er unbeachtet, insbesondere `vpn-up` und `vpn-down` — der Dienst bewertet physische Verbindungen, ein kommender oder gehender Tunnel geht ihn nichts an (siehe „Ausdrücklich nicht betrachtete Sonderfälle"). Die Liste steht hier und nicht nur im Hook, weil sie bestimmt, **wann** überhaupt neu bewertet wird: Eine Aktion, die hier fehlt, kostet keine Fehlermeldung, sondern bis zu 30 Sekunden Verzögerung — der Zeittakt fängt sie auf, und niemand bemerkt den Unterschied.
+
 **Die Datei heißt `/run/urbackup-gated/network-event`.** Der Name steht hier, weil er die einzige Verabredung zwischen zwei getrennt entwickelten Teilen ist: Der Dispatcher schreibt ihn als root, der Dienst filtert seine Verzeichnisüberwachung darauf. Wer eine der beiden Seiten ändert, ohne die andere zu kennen, bekommt keinen Fehler, sondern ein stilles Ausbleiben der Ereignisse — gedeckt nur noch vom Zeittakt, also mit bis zu 30 Sekunden Verzögerung statt sofort. **Ihr Inhalt spielt keine Rolle**; sie wird nur berührt, nicht beschrieben. Das unterscheidet sie von der Kommandodatei, die einen Zustand trägt (siehe „Manuelles Aktivieren und Deaktivieren").
 
 **Zwei Eigenschaften der Überwachung, die nicht Feinheit, sondern Voraussetzung sind:**
