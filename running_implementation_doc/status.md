@@ -36,3 +36,5 @@ Abgearbeitete Fahrplaneinträge, chronologisch. Begründungen stehen nicht hier,
 - Schritt 1 — Fehler dürfen nicht verschwinden: hängendes `systemctl`, stumme Dialogaufrufe, endgültig verworfene Meldungen, schiefe Zeitmarken.
 - Schritt 2 — Netzbewertung: extern konfigurierte Geräte werden bewertet, SSID-Zuordnung über das Gerät, SSID als Bytefolge statt als Text.
 - Schritt 3 — Installation, Unit und Werkzeuge: Unit an der grafischen Sitzung, ehrliche Abbruchmeldung bei abgelehnter sudoers-Datei, Neustart bei Aktualisierung, `python3-watchdog` wird angeboten, Kommandowerkzeug verweigert den Schreibweg als root, doppelte Verzeichnisprüfung entfernt.
+- Schritt 4 — Dateirechte und Doku-Nachführung: Status- und Kommandodatei wieder lesbar, Aktionsliste des Dispatchers dokumentiert, Selbstwiderspruch zu `install.sh` aufgelöst, ausgelieferte Konfiguration mit Platzhaltern, Anhang abgeschlossen.
+- Schritt 5 — Statusfenster: `\f`-Protokoll, Erkennen der geschlossenen Pipe und die Fensterlogik im Dienst geprüft. Damit ist kein Modul mehr ungeprüft.
