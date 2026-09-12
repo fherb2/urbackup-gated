@@ -265,6 +265,32 @@ class BlockingNotification(ReportingCase):
         self.released.set()
 
 
+class PeriodicClocks(ReportingCase):
+    """Both clocks restart on any message, not just the branch that was due."""
+
+    def test_any_message_restarts_both_clocks(self):
+        self.backend(True)
+        # Pretend both are long overdue, then let a state change speak up.
+        self.daemon._last_idle_notify = time.monotonic() - 100000
+        self.daemon._last_progress_notify = time.monotonic() - 100000
+        self.set_client_status({"internet_connected": False, "servers": []})
+        self.tick()
+
+        self.assertEqual(len(self.notifications), 1)
+        # Had only the due branch been advanced, the other would still be
+        # overdue and fire on the very next tick.
+        self.notifications.clear()
+        self.tick()
+        self.assertEqual(self.summaries(), [])
+
+    def test_a_held_back_message_does_not_restart_the_clocks(self):
+        before = self.daemon._last_idle_notify
+        self.daemon._notify_in_flight = True
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertFalse(self.daemon._notify("s", "b", state.gather(self.config)))
+        self.assertEqual(self.daemon._last_idle_notify, before)
+
+
 class UnknownUnitState(ReportingCase):
     """An unanswerable unit state has to fall on the safe side.
 

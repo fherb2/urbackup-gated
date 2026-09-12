@@ -284,6 +284,8 @@ Geschrieben wird die Datei atomar wie die Kommandodatei (siehe „Manuelles Akti
 - Wenn eine Sicherung läuft: alle 15 Minuten (konfigurierbar) ein kurzer Fortschrittsstatus.
 - Anzeigedauer 5 Sekunden, konfigurierbar.
 
+**Jede abgesetzte Meldung setzt beide Abstände zurück** — den der Ruhemeldung wie den der Fortschrittsmeldung. Würde nur der gerade fällige Zähler fortgeschrieben, liefe der andere während der ganzen Zeit weiter: Nach einer Sicherung, die länger als zwei Stunden dauert, käme die Ruhemeldung unmittelbar hinter der Meldung, dass die Sicherung beendet ist. Dasselbe nach dem Schließen des Statusfensters, während dessen gar nichts gesendet wurde. Eine zurückgehaltene Meldung setzt nichts zurück, denn gesagt wurde nichts.
+
 **Eine zurückgehaltene Meldung gilt nicht als erledigt.** Ein `notify-send`-Aufruf mit Schaltflächen blockiert bis zum Klick oder bis der Notification-Server die Meldung schließt; solange geht keine zweite hinaus. Wird ein Zustandswechsel deshalb zurückgehalten, bleibt der gemerkte Vorzustand **stehen**, sodass derselbe Wechsel beim nächsten Takt erneut versucht wird. Andernfalls wäre er nicht verspätet, sondern endgültig verloren — und niemand erführe davon. Der Verwurf selbst geht ins Journal.
 
 **Davon ausgenommen ist das offene Statusfenster.** Dort ist die Unterdrückung gewollt, weil der Status ohnehin sichtbar ist; würde auch hier zurückgehalten, käme nach dem Schließen ein Schwall veralteter Meldungen.

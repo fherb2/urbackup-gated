@@ -205,12 +205,21 @@ class Daemon:
             due = now - self._last_idle_notify >= self._config.idle_notify_seconds
         if not due:
             return
-        if running:
-            self._last_progress_notify = now
-        else:
-            self._last_idle_notify = now
         summary, body = state.notify_summary(status)
         self._notify(summary, body, status)
+
+    def _mark_notified(self) -> None:
+        """Both clocks start over whenever anything was said.
+
+        Advancing only the branch that was due let the other one fall far
+        behind: after a backup longer than the idle interval, the quiet-time
+        message followed immediately on the one announcing the backup had
+        ended. The same after closing the status window, during which nothing
+        was sent at all.
+        """
+        now = time.monotonic()
+        self._last_idle_notify = now
+        self._last_progress_notify = now
 
     def _notify(self, summary: str, body: str, status: dict) -> bool:
         """Send a notification from a worker thread, since the call blocks.
@@ -239,6 +248,7 @@ class Daemon:
             args=(summary, body, timeout, actions),
             daemon=True,
         ).start()
+        self._mark_notified()
         return True
 
     def _notify_worker(
