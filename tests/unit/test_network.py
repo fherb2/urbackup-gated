@@ -81,6 +81,25 @@ class AmbiguousWifi(support.StubbedCase):
         self.assertIsNone(network.active_connections()[0].ssid)
 
 
+class ExternallyConnected(support.StubbedCase):
+    """Devices brought up outside NetworkManager report "connected (externally)".
+
+    Comparing the state for equality let them fall through unjudged. Next to an
+    ethernet link that reads as "allowed" - exactly the outcome the decision
+    rules exist to prevent.
+    """
+
+    scenario = "wifi_external"
+
+    def test_an_externally_connected_wifi_is_judged(self):
+        kinds = {c.kind for c in network.active_connections()}
+        self.assertEqual(kinds, {network.ETHERNET, network.WIFI})
+
+    def test_loopback_stays_out_even_when_externally_connected(self):
+        devices = [c.device for c in network.active_connections()]
+        self.assertNotIn("lo", devices)
+
+
 class NothingConnected(support.StubbedCase):
     scenario = "nothing"
 

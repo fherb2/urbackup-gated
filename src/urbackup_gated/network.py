@@ -99,7 +99,14 @@ def active_connections() -> tuple[Connection, ...]:
         if len(fields) < 4:
             continue
         device, kind, state, name = fields[0], fields[1], fields[2], fields[3]
-        if state != _CONNECTED or kind == "loopback":
+        # Not an equality check: nmcli also reports "connected (externally)" for
+        # devices brought up outside NetworkManager, and "(site only)" or
+        # "(local only)" for limited reachability. All of them are connected. A
+        # wifi association made by wpa_supplicant would otherwise go unjudged -
+        # and next to an ethernet link that would read as "allowed", which is
+        # the one outcome the decision rules exist to prevent. "disconnected"
+        # and "connecting" do not start with the word, so they still fall out.
+        if not state.startswith(_CONNECTED) or kind == "loopback":
             continue
         ssid = None
         if kind == WIFI:
