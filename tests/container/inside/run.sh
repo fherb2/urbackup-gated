@@ -246,6 +246,7 @@ echo ethernet >"$TESTDIR/scenario"
 systemctl stop "$CLIENT_UNIT" >/dev/null 2>&1
 runuser -u "$SERVICE_USER" -- /usr/local/bin/urbackup-gated \
     >"$TESTDIR/daemon.log" 2>&1 &
+daemon_pid=$!
 
 if wait_until 20 test -f "$RUNDIR/state.json"; then
     ok "daemon writes the status file"
@@ -302,7 +303,17 @@ check "activation lets it run again" wait_until 10 client_active
 echo nothing >"$TESTDIR/scenario"
 touch "$RUNDIR/network-event"
 sleep 2
-check "without any connection the running client is left alone" client_active
+if client_active; then
+    ok "without any connection the running client is left alone"
+else
+    no "without any connection the running client is left alone"
+    # A dead daemon looks exactly like this and keeps every later check green,
+    # so say which of the two it was.
+    kill -0 "$daemon_pid" 2>/dev/null \
+        && echo "--- the daemon is still running" \
+        || echo "--- the daemon is gone"
+    echo "--- daemon log"; tail -20 "$TESTDIR/daemon.log"
+fi
 
 python3 - "$RUNDIR/state.json" <<'PY' && ok "status file matches the agreed schema" || no "status file matches the agreed schema"
 import json, sys
