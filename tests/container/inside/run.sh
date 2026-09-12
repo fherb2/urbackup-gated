@@ -100,9 +100,17 @@ for path in /usr/local/lib/urbackup-gated /usr/local/bin/urbackup-gated \
     [ -e "$path" ] && leftovers="$leftovers $path"
 done
 [ -z "$leftovers" ] \
-    && ok "a rejected sudoers file leaves nothing behind" \
-    || no "a rejected sudoers file leaves nothing behind -$leftovers"
-rm -f /usr/local/bin/visudo
+    && ok "a rejected sudoers file leaves no file of ours behind" \
+    || no "a rejected sudoers file leaves no file of ours behind -$leftovers"
+# The run got as far as offering the runtime packages, so a package may well
+# have been installed by then - which is exactly why the message says "no files
+# of urbackup-gated" and not "nothing installed". Undo that here, otherwise the
+# checks below would find a system that is no longer untouched.
+grep -q 'install.*\byad\b' "$TESTDIR/apt-get.log" \
+    && ok "the refusal came after the packages, as the message says" \
+    || no "the refusal came after the packages, as the message says"
+rm -f /usr/local/bin/visudo /usr/local/bin/yad
+: >"$TESTDIR/apt-get.log"
 
 check_not "yad is absent to begin with" command -v yad
 check "install.sh succeeds" "$SOURCE/install.sh" --yes "$SERVICE_USER"

@@ -30,3 +30,9 @@ Abgearbeitete Fahrplaneinträge, chronologisch. Begründungen stehen nicht hier,
 - Kapitel „Installation und Deinstallation" mit der Definition der Ordnerstruktur aufgenommen.
 - Die vier vorgeschriebenen, bis dahin ungeprüften Verhaltensweisen mit Unit-Tests abgedeckt; Selbstheilung und der nicht-optische Teil des Fail-safe aus der Handabnahme in den Container gezogen.
 - Pufferung der Dienstausgabe abgeschaltet: Ohne das erreichte keine Meldung das Journal, solange der Dienst lief.
+
+## Nacharbeit aus dem Code-Review
+
+- Schritt 1 — Fehler dürfen nicht verschwinden: hängendes `systemctl`, stumme Dialogaufrufe, endgültig verworfene Meldungen, schiefe Zeitmarken.
+- Schritt 2 — Netzbewertung: extern konfigurierte Geräte werden bewertet, SSID-Zuordnung über das Gerät, SSID als Bytefolge statt als Text.
+- Schritt 3 — Installation, Unit und Werkzeuge: Unit an der grafischen Sitzung, ehrliche Abbruchmeldung bei abgelehnter sudoers-Datei, Neustart bei Aktualisierung, `python3-watchdog` wird angeboten, Kommandowerkzeug verweigert den Schreibweg als root, doppelte Verzeichnisprüfung entfernt.
