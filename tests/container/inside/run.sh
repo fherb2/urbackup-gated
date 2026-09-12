@@ -81,6 +81,29 @@ mkdir -p /etc/NetworkManager/dispatcher.d
 systemctl enable "$CLIENT_UNIT" >/dev/null 2>&1
 
 section "installation"
+# A refusal has to leave the system as it was. The sudoers check is the one that
+# can fail on a healthy machine, so it is the one worth proving: a stand-in
+# visudo that rejects everything, and afterwards not one of our files anywhere.
+cat >/usr/local/bin/visudo <<'STUB'
+#!/bin/sh
+echo "stub visudo: refusing" >&2
+exit 1
+STUB
+chmod 0755 /usr/local/bin/visudo
+check_not "install.sh stops when the sudoers file is rejected" \
+    "$SOURCE/install.sh" --yes "$SERVICE_USER"
+leftovers=
+for path in /usr/local/lib/urbackup-gated /usr/local/bin/urbackup-gated \
+            /usr/local/bin/urbackup-gated-ctl /usr/local/bin/urbackup-gated-uninstall \
+            /usr/local/share/doc/urbackup-gated /etc/sudoers.d/urbackup-gated \
+            /etc/tmpfiles.d/urbackup-gated.conf "$DISPATCHER" "$USER_UNIT"; do
+    [ -e "$path" ] && leftovers="$leftovers $path"
+done
+[ -z "$leftovers" ] \
+    && ok "a rejected sudoers file leaves nothing behind" \
+    || no "a rejected sudoers file leaves nothing behind -$leftovers"
+rm -f /usr/local/bin/visudo
+
 check_not "yad is absent to begin with" command -v yad
 check "install.sh succeeds" "$SOURCE/install.sh" --yes "$SERVICE_USER"
 

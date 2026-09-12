@@ -107,6 +107,21 @@ systemctl cat "$CLIENT_UNIT" >/dev/null 2>&1 \
 ensure_package yad yad
 ensure_package notify-send libnotify-bin
 
+# -- privileges, checked before anything is written ---------------------------
+# A broken sudoers file locks sudo out system wide, so it is written to a
+# temporary file and validated first. That validation happens here, ahead of the
+# first file we put down, so its refusal really does leave the system untouched
+# - the file itself is installed further below, in its own section.
+
+sudoers_tmp=$(mktemp)
+trap 'rm -f "$sudoers_tmp"' EXIT
+sed -e "s/@USER@/$SERVICE_USER/" \
+    "$SOURCE_DIR/packaging/sudoers.d/urbackup-gated" >"$sudoers_tmp"
+# Not "nothing installed": a runtime package may have been added just above.
+# What is true is that none of our own files exist yet.
+visudo -c -q -f "$sudoers_tmp" \
+    || die "the generated sudoers file is invalid - no files of urbackup-gated were written"
+
 # -- manifest ----------------------------------------------------------------
 # Everything this script puts down is recorded here, and uninstall.sh works from
 # that record alone. Without it both scripts would carry the same list of paths,
@@ -176,14 +191,8 @@ systemd-tmpfiles --create "$TMPFILES_FILE"
 record "$TMPFILES_FILE"
 
 # -- privileges --------------------------------------------------------------
-# Written to a temporary file and checked first: a broken sudoers file locks
-# sudo out system wide.
+# Generated and validated further up, before the first file was written.
 
-sudoers_tmp=$(mktemp)
-trap 'rm -f "$sudoers_tmp"' EXIT
-sed -e "s/@USER@/$SERVICE_USER/" \
-    "$SOURCE_DIR/packaging/sudoers.d/urbackup-gated" >"$sudoers_tmp"
-visudo -c -q -f "$sudoers_tmp" || die "generated sudoers file is invalid - nothing installed"
 install -m 0440 -o root -g root "$sudoers_tmp" "$SUDOERS_FILE"
 record "$SUDOERS_FILE"
 
