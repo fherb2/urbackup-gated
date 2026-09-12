@@ -39,12 +39,11 @@ need() {
 # - but the user's consent to put another package on their machine. The package
 # manager is called through PATH on purpose, so the container tests can put a
 # recording stand-in in front of it instead of really pulling GTK in.
-ensure_package() {
-    local program=$1 package=$2 answer=
-    command -v "$program" >/dev/null 2>&1 && return 0
+offer_and_install() {
+    local what=$1 package=$2 answer=
 
     echo
-    echo "$program is missing. urbackup-gated needs it; it comes with the package '$package'."
+    echo "$what is missing. urbackup-gated needs it; it comes with the package '$package'."
     if [ "$ASSUME_YES" -ne 1 ]; then
         printf 'Install %s now? [y/N] ' "$package"
         # Braces so the shell's own complaint about a missing /dev/tty - the
@@ -59,8 +58,23 @@ ensure_package() {
     echo "installing $package"
     DEBIAN_FRONTEND=noninteractive apt-get install -y "$package" \
         || die "could not install $package - install it yourself and run install.sh again"
+}
+
+# Two ways of asking "is it there?", one way of dealing with "no".
+ensure_package() {
+    local program=$1 package=$2
+    command -v "$program" >/dev/null 2>&1 && return 0
+    offer_and_install "$program" "$package"
     command -v "$program" >/dev/null 2>&1 \
         || die "$package was installed but $program is still not there"
+}
+
+ensure_python_module() {
+    local module=$1 package=$2
+    python3 -c "import $module" >/dev/null 2>&1 && return 0
+    offer_and_install "the Python module $module" "$package"
+    python3 -c "import $module" >/dev/null 2>&1 \
+        || die "$package was installed but $module is still not importable"
 }
 
 [ "$(id -u)" -eq 0 ] || die "must run as root"
@@ -95,17 +109,20 @@ need systemctl
 
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
     || die "python3 3.11 or newer is required (tomllib)"
-python3 -c 'import watchdog' 2>/dev/null \
-    || die "the watchdog module is required (apt install python3-watchdog)"
-
 systemctl cat "$CLIENT_UNIT" >/dev/null 2>&1 \
     || die "$CLIENT_UNIT not found - install the UrBackup client first"
 
-# These two are rarely present on a desktop already, so they are offered rather
-# than demanded. Nothing has been written to the system at this point, so a
-# refusal leaves no half-installed state behind.
+# These three are rarely present on a desktop already, so they are offered
+# rather than demanded. Nothing has been written to the system at this point, so
+# a refusal leaves no half-installed state behind.
+#
+# NetworkManager is deliberately not among them: without it the whole premise of
+# this tool is absent, and that is a decision about the machine rather than
+# about this program. For watchdog that reasoning does not hold - it is a
+# runtime package like the other two.
 ensure_package yad yad
 ensure_package notify-send libnotify-bin
+ensure_python_module watchdog python3-watchdog
 
 # -- privileges, checked before anything is written ---------------------------
 # A broken sudoers file locks sudo out system wide, so it is written to a
