@@ -234,6 +234,32 @@ class BlockingNotification(ReportingCase):
         self.released.set()
 
 
+class UnknownUnitState(ReportingCase):
+    """An unanswerable unit state has to fall on the safe side.
+
+    Safe means "assume it runs": over a forbidden network that still attempts a
+    stop, while the opposite assumption would leave a client backing up over a
+    metered link with nobody to stop it.
+    """
+
+    scenario = "forbidden_wifi"
+
+    def test_a_forbidden_network_still_attempts_the_stop(self):
+        self.set_client_state(active=True)
+        status = state.gather(self.config)
+        status["urbackup_client"]["unit_active"] = None
+        self.assertEqual(self.daemon._apply(status), "stopped")
+        self.assertFalse(self.client_is_active())
+
+    def test_an_allowed_network_does_not_start_on_a_guess(self):
+        self.use_scenario("ethernet_only")
+        self.set_client_state(active=False)
+        status = state.gather(self.config)
+        status["urbackup_client"]["unit_active"] = None
+        self.assertIsNone(self.daemon._apply(status))
+        self.assertFalse(self.client_is_active())
+
+
 class KnownChange(unittest.TestCase):
     def test_only_two_known_and_different_values_count(self):
         cases = {

@@ -97,6 +97,35 @@ class UnitQueries(support.StubbedCase):
         self.assertTrue(client.is_enabled())
 
 
+class HangingSystemctl(support.StubbedCase):
+    """systemctl can hang on D-Bus under load or during login.
+
+    Letting that escape ended the daemon with a traceback, which aborted a
+    backup for no reason the user could see anywhere but the journal.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.scenario_dir / "systemctl_hangs").touch()
+        self.patch(client, "QUERY_TIMEOUT", 0.3)
+        self.patch(client, "CONTROL_TIMEOUT", 0.3)
+        self.patch(client, "STATUS_TIMEOUT", 0.3)
+
+    def test_a_query_that_times_out_answers_unknown(self):
+        self.assertIsNone(client.is_active())
+        self.assertIsNone(client.is_enabled())
+
+    def test_a_privileged_call_that_times_out_raises_controlerror(self):
+        # ControlError and not something else: the daemon already catches it
+        # everywhere such a call is made.
+        with self.assertRaises(client.ControlError):
+            client.stop()
+
+    def test_the_status_survives_a_hanging_query(self):
+        status = client.status()
+        self.assertIsNone(status.unit_active)
+
+
 class UnitControl(support.StubbedCase):
     def test_start_and_stop_act_on_the_unit(self):
         client.start()
@@ -121,9 +150,11 @@ class UnitControl(support.StubbedCase):
         for call in self.calls("systemctl"):
             self.assertTrue(call.endswith(client.UNIT), call)
 
-    def test_failure_raises_instead_of_passing_silently(self):
+    def test_a_missing_sudo_raises_controlerror_not_a_bare_oserror(self):
+        # It used to escape as OSError, which no caller catches, so it ended the
+        # daemon with a traceback. ControlError is what every call site handles.
         self.patch(client, "_SUDO", str(self.tmp / "no-such-sudo"))
-        with self.assertRaises(OSError):
+        with self.assertRaises(client.ControlError):
             client.start()
 
     def test_refused_privilege_raises(self):

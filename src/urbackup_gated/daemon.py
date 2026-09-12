@@ -112,7 +112,10 @@ class Daemon:
     def _enforce_disabled(self) -> None:
         """Undo the unconditional systemctl enable of the UrBackup installer."""
         try:
-            if client.is_enabled():
+            # Unknown counts as enabled: attempting the disable is cheap and
+            # says so if it fails, while skipping it would leave the client to
+            # come up with root privileges before anyone logs in.
+            if client.is_enabled() is not False:
                 client.disable()
                 print(f"{client.UNIT} was enabled at boot - disabled it")
         except client.ControlError as error:
@@ -121,7 +124,7 @@ class Daemon:
     def _stop_client_on_exit(self) -> None:
         """Backups must not outlive the session this daemon belongs to."""
         try:
-            if client.is_active():
+            if client.is_active() is not False:
                 client.stop()
                 print(f"stopped {client.UNIT} on shutdown")
         except client.ControlError as error:
@@ -133,7 +136,12 @@ class Daemon:
         effective = status["decision"]["effective"]
         if effective is None:
             return None
-        active = status["urbackup_client"]["unit_active"]
+        # An unanswerable unit state counts as "running". That is the only
+        # direction that stays safe in both branches: over a forbidden network a
+        # stop is at least attempted, and over an allowed one a start is merely
+        # postponed. The opposite assumption would leave a running client on a
+        # metered link with nobody stopping it.
+        active = status["urbackup_client"]["unit_active"] is not False
         try:
             if effective and not active:
                 client.start()
@@ -282,7 +290,7 @@ def _fail_safe(message: str) -> int:
     """Keep the client stopped and tell the user what is broken."""
     print(f"configuration error: {message}", file=sys.stderr)
     try:
-        if client.is_active():
+        if client.is_active() is not False:
             client.stop()
     except client.ControlError as error:
         print(f"cannot stop {client.UNIT}: {error}", file=sys.stderr)

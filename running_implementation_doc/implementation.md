@@ -60,6 +60,8 @@ einmal schmerzhaft auffallen:
 Root-Rechten hochkommt. Einzige Instanz, die es je startet oder stoppt, ist
 `urbackup-gated`.
 
+**Ein unbeantwortbarer Unit-Zustand zählt als „läuft".** `systemctl` spricht über D-Bus mit dem System-Manager und kann dort hängen — unter Last oder während der Anmeldephase. Eine solche Abfrage liefert deshalb nicht „ja" oder „nein", sondern einen dritten Wert: **unbekannt**. Gehandelt wird darauf, als liefe der Client. Das ist die einzige Richtung, die in beiden Zweigen trägt: Ist das Netz verboten, wird ein Stopp wenigstens **versucht**; ist es erlaubt, wird lediglich **nicht gestartet**. Die umgekehrte Annahme hätte den gefährlichen Ausgang — ein laufender Client über einem volumenbeschränkten Netz, den niemand anhält. Es ist dieselbe Regel wie bei der Netzlage, nur auf den Client angewandt: Eine verpasste Sicherungsgelegenheit ist unkritisch, eine ungeprüfte Sicherung nicht.
+
 **Die Rücknahme gehört zur Festlegung:** `uninstall.sh` nimmt den Client-Dienst wieder in den Systemstart auf (`systemctl enable --now`). Sonst bliebe nach dem Entfernen von `urbackup-gated` ein deaktivierter Client zurück, den niemand mehr startet — das Ergebnis wäre „gar keine Sicherungen mehr", und zwar unbemerkt, weil auch die Meldungen mit dem Dienst verschwinden. Die Deaktivierung ist also kein Zustand, den wir herstellen, sondern einer, den wir für die Dauer unserer Zuständigkeit halten. Gelingt das Wiederaktivieren nicht, sagt `uninstall.sh` das ausdrücklich, statt es zu verschweigen. Die Konfigurationsdatei bleibt dabei absichtlich stehen; sie zu löschen ist Sache des Nutzers.
 
 **Selbstheilung nach Neuinstallation:** Das offizielle UrBackup-Installationsskript

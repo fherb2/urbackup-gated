@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import sys
 from dataclasses import dataclass
 
 UNIT = "urbackupclientbackend.service"
@@ -10,6 +11,12 @@ _SYSTEMCTL = "/usr/bin/systemctl"
 _SUDO = "/usr/bin/sudo"
 _CLIENTCTL = "urbackupclientctl"
 
+# Module constants rather than literals, so a test can lower them instead of
+# waiting out the real thing.
+QUERY_TIMEOUT = 10
+CONTROL_TIMEOUT = 30
+STATUS_TIMEOUT = 20
+
 
 class ControlError(Exception):
     """A privileged systemctl call failed."""
@@ -17,7 +24,7 @@ class ControlError(Exception):
 
 @dataclass(frozen=True)
 class ClientStatus:
-    unit_active: bool
+    unit_active: bool | None
     raw_available: bool
     server_connected: bool | None
     backup_running: bool | None
@@ -27,34 +34,47 @@ class ClientStatus:
     speed_bpms: float | None
 
 
-def _systemctl_query(verb: str) -> bool:
-    result = subprocess.run(
-        [_SYSTEMCTL, verb, "--quiet", UNIT],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+def _systemctl_query(verb: str) -> bool | None:
+    """Ask the unit's state. None means the question could not be answered.
+
+    systemctl talks to the system manager over D-Bus and can hang under load or
+    during login. Letting that escape would end the daemon with a traceback and
+    abort a backup for no reason the user could see.
+    """
+    try:
+        result = subprocess.run(
+            [_SYSTEMCTL, verb, "--quiet", UNIT],
+            capture_output=True,
+            text=True,
+            timeout=QUERY_TIMEOUT,
+        )
+    except (subprocess.TimeoutExpired, OSError) as error:
+        print(f"systemctl {verb} {UNIT} could not be asked: {error}", file=sys.stderr)
+        return None
     return result.returncode == 0
 
 
 def _systemctl_privileged(verb: str) -> None:
     # -n so a missing sudoers entry fails immediately instead of waiting for a
     # password nobody can type into a background service.
-    result = subprocess.run(
-        [_SUDO, "-n", _SYSTEMCTL, verb, UNIT],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    try:
+        result = subprocess.run(
+            [_SUDO, "-n", _SYSTEMCTL, verb, UNIT],
+            capture_output=True,
+            text=True,
+            timeout=CONTROL_TIMEOUT,
+        )
+    except (subprocess.TimeoutExpired, OSError) as error:
+        raise ControlError(f"systemctl {verb} {UNIT} could not be run: {error}") from None
     if result.returncode != 0:
         raise ControlError(f"systemctl {verb} {UNIT} failed: {result.stderr.strip()}")
 
 
-def is_active() -> bool:
+def is_active() -> bool | None:
     return _systemctl_query("is-active")
 
 
-def is_enabled() -> bool:
+def is_enabled() -> bool | None:
     return _systemctl_query("is-enabled")
 
 
@@ -76,9 +96,9 @@ def _raw_status() -> dict | None:
             [_CLIENTCTL, "status"],
             capture_output=True,
             text=True,
-            timeout=20,
+            timeout=STATUS_TIMEOUT,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):
         return None
     if result.returncode != 0:
         return None

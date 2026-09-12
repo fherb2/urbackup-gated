@@ -10,6 +10,12 @@ set -eu
 
 printf '%s\n' "$*" >>"$URBACKUP_GATED_SCENARIO/systemctl-calls.log"
 
+# systemctl talks to the system manager over D-Bus and can hang there. The
+# marker file lets a test produce that without waiting for a real one.
+if [ -f "$URBACKUP_GATED_SCENARIO/systemctl_hangs" ]; then
+    sleep 30
+fi
+
 verb=$1
 shift
 [ "${1:-}" = --quiet ] && shift || true
