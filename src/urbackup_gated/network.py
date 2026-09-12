@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 
 ETHERNET = "ethernet"
@@ -73,6 +74,29 @@ def _split_terse(line: str) -> list[str]:
     return fields
 
 
+def _decode_ssid(hex_digits: str) -> str | None:
+    """Turn nmcli's SSID-HEX field into text.
+
+    An SSID is a byte string, not text: 802.11 does not prescribe an encoding.
+    Reading the hex form and decoding it here keeps the bytes intact no matter
+    what nmcli would have made of them under LC_ALL=C, whose character set is
+    ASCII. Anything that is not UTF-8 is replaced rather than raised - a
+    decoding error inside the query would end the daemon.
+    """
+    try:
+        raw = bytes.fromhex(hex_digits)
+    except ValueError:
+        print(f"nmcli reported an unreadable SSID: {hex_digits!r}", file=sys.stderr)
+        return None
+    text = raw.decode("utf-8", errors="replace")
+    if "�" in text:
+        # It will now match no entry of the allow list and is therefore
+        # forbidden. That is the right direction, but without this line nobody
+        # could tell why that network never backs up.
+        print(f"SSID is not valid UTF-8, shown as {text!r}", file=sys.stderr)
+    return text
+
+
 def _ssid_by_device() -> dict[str, str]:
     """Map each associated wifi device to the SSID it is associated with.
 
@@ -83,14 +107,16 @@ def _ssid_by_device() -> dict[str, str]:
     """
     # --rescan no keeps this from triggering a wifi scan, which would otherwise
     # happen on every tick.
-    output = _run("-f", "ACTIVE,SSID,DEVICE", "device", "wifi", "list", "--rescan", "no")
+    output = _run("-f", "ACTIVE,SSID-HEX,DEVICE", "device", "wifi", "list", "--rescan", "no")
     by_device = {}
     for line in output.splitlines():
         if not line:
             continue
         fields = _split_terse(line)
         if len(fields) >= 3 and fields[0] == "yes" and fields[1] and fields[2]:
-            by_device[fields[2]] = fields[1]
+            ssid = _decode_ssid(fields[1])
+            if ssid:
+                by_device[fields[2]] = ssid
     return by_device
 
 

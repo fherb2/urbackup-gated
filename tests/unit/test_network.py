@@ -61,10 +61,13 @@ class WifiConnections(support.StubbedCase):
         self.assertEqual(connection.name, "home profile")
         self.assertEqual(connection.ssid, "lieluX")
 
-    def test_the_entry_is_matched_by_device(self):
+    def test_the_query_asks_for_the_device_and_the_hex_form(self):
+        # The stub answers with its fixture whatever is asked for, so the field
+        # selection is only ever as correct as this check makes it.
         network.active_connections()
         wifi_call = next(call for call in self.calls("nmcli") if "wifi" in call)
         self.assertIn("DEVICE", wifi_call)
+        self.assertIn("SSID-HEX", wifi_call)
 
     def test_scan_is_suppressed(self):
         network.active_connections()
@@ -73,10 +76,35 @@ class WifiConnections(support.StubbedCase):
 
 
 class ColonInSsid(support.StubbedCase):
+    """A colon in the SSID used to need unescaping; over the hex form it cannot
+    even appear. The property still has to hold, so the scenario stays."""
+
     scenario = "colon_ssid"
 
     def test_ssid_with_colons_survives(self):
         self.assertEqual(network.active_connections()[0].ssid, "my:odd:net")
+
+
+class SsidDecoding(unittest.TestCase):
+    """An SSID is a byte string; 802.11 prescribes no encoding for it.
+
+    Reading the hex form and decoding it here means nmcli's own idea of how to
+    render it under LC_ALL=C - whose character set is ASCII - never matters.
+    """
+
+    def test_plain_text(self):
+        self.assertEqual(network._decode_ssid("6C69656C7558"), "lieluX")
+
+    def test_non_ascii_survives_intact(self):
+        self.assertEqual(network._decode_ssid("4BC3A47365".upper()), "Käse")
+
+    def test_bytes_that_are_not_utf8_are_replaced_not_raised(self):
+        # Raising here would end the daemon; the replaced name then matches no
+        # entry of the allow list, which is the safe direction.
+        self.assertEqual(network._decode_ssid("FF"), "�")
+
+    def test_something_that_is_not_hex_at_all_is_refused(self):
+        self.assertIsNone(network._decode_ssid("zz"))
 
 
 class WifiWithoutAnEntryOfItsOwn(support.StubbedCase):

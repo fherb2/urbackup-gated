@@ -23,8 +23,8 @@ case "$*" in
         ;;
     *"device wifi"*)
         case "$scenario" in
-            allowed_wifi)   printf 'yes:allowed-net:wlan0\n' ;;
-            forbidden_wifi) printf 'yes:phone-hotspot:wlan0\n' ;;
+            allowed_wifi)   printf 'yes:616C6C6F7765642D6E6574:wlan0\n' ;;
+            forbidden_wifi) printf 'yes:70686F6E652D686F7473706F74:wlan0\n' ;;
             *)              printf '' ;;
         esac
         ;;
