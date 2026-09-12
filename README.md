@@ -34,7 +34,12 @@ runs even though it would be safe. Switch the wifi off in that case.
 ## Requirements
 
 - The UrBackup client, providing `urbackupclientbackend.service`
-- Python 3.11 or newer, and `python3-watchdog`
+- The **system** Python, 3.11 or newer, and `python3-watchdog` installed for it.
+  The service runs on `/usr/bin/python3` and never on whatever `python3` your
+  PATH happens to point at: a virtual environment belongs to a task you switch
+  between, and the modules apt installs are not on its path. The installer
+  checks that same interpreter, and refuses one that turns out to be a virtual
+  environment.
 - NetworkManager (`nmcli`)
 - `yad` and `libnotify-bin` - rarely present already, so the installer offers to
   install them for you rather than sending you away

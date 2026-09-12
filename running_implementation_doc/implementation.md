@@ -128,6 +128,16 @@ Repository klonen, `install.sh` als root ausführen, fertig. **Der Klon ist dana
 | systemd-User-Unit | `/usr/local/lib/systemd/user/` |
 | `tmpfiles.d`-Schnipsel, `sudoers`-Freigabe, Dispatcher-Hook, Konfiguration | an ihren jeweiligen Systemorten unter `/etc` |
 
+### Der Dienst läuft auf dem System-Python
+
+**Festgelegt: `/usr/bin/python3`, und nicht das, was gerade im Suchpfad steht.** Ein virtuelles Environment gehört einem Nutzer und einer Aufgabe — es wird im Laufe einer Sitzung gewechselt, und auf manchen Rechnern gibt es mehrere davon nebeneinander. Der Dienst muss über all das hinweg weiterlaufen. Er darf seinen Interpreter deshalb nicht aus dem Suchpfad beziehen.
+
+**Was das praktisch heißt:** Die per `apt` installierten Module liegen in `/usr/lib/python3/dist-packages`; dieses Verzeichnis steht nur im Suchpfad des System-Interpreters, nicht in dem eines virtuellen Environments. Am Zielrechner nachgemessen: Dort fand das aktive Environment `watchdog` nicht, obwohl das Paket installiert war.
+
+**Geprüft wird derselbe Interpreter, der später läuft.** Das ist der eigentliche Punkt — es ist keine Übereinstimmung, die man einhalten muss, sondern eine, die nicht brechen kann: Beide Seiten, die Abhängigkeitsprüfung im Installer und der erzeugte Startbefehl, stammen aus **einer** Stelle. Vorher fragte die Prüfung den Suchpfad und der Startbefehl nannte den festen Pfad; dass das auf dem Zielrechner trotzdem zusammenpasste, lag allein daran, dass `sudo` den Suchpfad zurücksetzt — also an der Umgebung, nicht am Skript.
+
+**Der Pfad ist Konvention, die Eigenschaft ist die Bedingung.** Eine Umgebungsvariable, die „das System-Python" benennt, gibt es nicht — weder in POSIX noch bei Debian oder Ubuntu. Was es gibt: Auf diesen Distributionen gehört `/usr/bin/python3` einem `apt`-Paket und trägt seit Ubuntu 23.04 die PEP-668-Markierung `EXTERNALLY-MANAGED`, also „wird von der Distribution gepflegt, nicht von `pip`". Der Installer verlässt sich aber nicht darauf, sondern **prüft die Eigenschaft nach**: Ein Interpreter weiß selbst, ob er in einem virtuellen Environment steckt (`sys.prefix` gegenüber `sys.base_prefix`). Steht dort eines, bricht die Installation mit dieser Begründung ab. Damit trägt die Festlegung auch dann, wenn eine künftige Distribution den Ort anders belegt.
+
 **Warum die Unit unter `/usr/local/lib/systemd/user` und nicht unter `/etc/systemd/user`:** `/etc/systemd/…` ist der Ort für Anpassungen des Administrators; mitgelieferte Units gehören nicht dorthin. Da die Software unter `/usr/local` liegt, ist `/usr/local/lib/systemd/user` der passende Ort — am System als Suchpfad nachgewiesen.
 
 Dass dies eine Installation für **genau einen Nutzer** ist, steht mit Begründung unter „Benannte Nebenwirkung" im Kapitel „Zustand, Merken zwischen Aufrufen und Statusabfrage".

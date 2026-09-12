@@ -24,6 +24,14 @@ SUDOERS_FILE=/etc/sudoers.d/urbackup-gated
 MANIFEST="$LIB_DIR/manifest"
 CLIENT_UNIT=urbackupclientbackend.service
 
+# The system interpreter, and only that one. What matters is not the path but
+# the property: a virtual environment belongs to a user and to a task, it is
+# switched during a session and there may be several of them, while the service
+# has to keep running through all of that. On Debian and Ubuntu this path is
+# where the system interpreter lives; whether what sits there really is one is
+# checked below rather than assumed.
+PYTHON=/usr/bin/python3
+
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 die() {
@@ -71,9 +79,9 @@ ensure_package() {
 
 ensure_python_module() {
     local module=$1 package=$2
-    python3 -c "import $module" >/dev/null 2>&1 && return 0
+    "$PYTHON" -c "import $module" >/dev/null 2>&1 && return 0
     offer_and_install "the Python module $module" "$package"
-    python3 -c "import $module" >/dev/null 2>&1 \
+    "$PYTHON" -c "import $module" >/dev/null 2>&1 \
         || die "$package was installed but $module is still not importable"
 }
 
@@ -101,14 +109,21 @@ echo "Installing urbackup-gated for user $SERVICE_USER"
 
 # -- dependencies ------------------------------------------------------------
 
-need python3
 need nmcli "part of network-manager"
 need systemd-tmpfiles
 need visudo
 need systemctl
 
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
-    || die "python3 3.11 or newer is required (tomllib)"
+# Named with its path, not looked up on PATH: there, a virtual environment would
+# answer, and its modules are not the ones the service will find.
+[ -x "$PYTHON" ] || die "$PYTHON is missing - that is the system interpreter this service runs on"
+"$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' \
+    || die "$PYTHON must be 3.11 or newer (tomllib)"
+# The path is the convention; this is the property. An interpreter knows whether
+# it sits in a virtual environment, and one that does would neither see the
+# packages apt installs nor survive the user switching tasks.
+"$PYTHON" -c 'import sys; sys.exit(1 if sys.prefix != sys.base_prefix else 0)' \
+    || die "$PYTHON is a virtual environment, not the system interpreter"
 systemctl cat "$CLIENT_UNIT" >/dev/null 2>&1 \
     || die "$CLIENT_UNIT not found - install the UrBackup client first"
 
@@ -176,7 +191,7 @@ write_wrapper() {
 #!/bin/sh
 PYTHONPATH=$LIB_DIR
 export PYTHONPATH
-exec /usr/bin/python3 -u -m $module "\$@"
+exec $PYTHON -u -m $module "\$@"
 EOF
     chmod 0755 "$path"
 }

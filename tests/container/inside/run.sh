@@ -133,6 +133,24 @@ check_not "install.sh stops when the package is refused" \
 printf '#!/bin/sh\nexit 0\n' >/usr/local/bin/yad
 chmod 0755 /usr/local/bin/yad
 
+# The service runs on the system interpreter, so that is the one whose modules
+# have to be checked. A virtual environment on PATH would answer instead - and
+# its packages are not the ones the service finds. Here that is a python3 in
+# /usr/local/bin, which comes first: without the fix the dependency check would
+# consult it, fail to import watchdog, install the package, fail again and die.
+cat >/usr/local/bin/python3 <<'STUB'
+#!/bin/sh
+echo "stub python3: this is not the system interpreter" >&2
+exit 1
+STUB
+chmod 0755 /usr/local/bin/python3
+check "install.sh ignores a python3 that shadows the system one" \
+    "$SOURCE/install.sh" --yes "$SERVICE_USER"
+rm -f /usr/local/bin/python3
+grep -qx "exec /usr/bin/python3 -u -m urbackup_gated.daemon \"\$@\"" /usr/local/bin/urbackup-gated \
+    && ok "the wrapper names the system interpreter" \
+    || no "the wrapper names the system interpreter"
+
 check "daemon wrapper is executable" test -x /usr/local/bin/urbackup-gated
 check "control tool is executable" test -x /usr/local/bin/urbackup-gated-ctl
 check "python package installed" test -f /usr/local/lib/urbackup-gated/urbackup_gated/daemon.py
