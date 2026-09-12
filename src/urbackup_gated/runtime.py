@@ -42,6 +42,12 @@ def write_atomic(path: Path, text: str) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
+            # NamedTemporaryFile creates with 0600 and os.replace keeps that, so
+            # the files ended up unreadable for everyone but the service user -
+            # while the directory is 0755 and both the tmpfiles comment and the
+            # documentation promise they can be read. Writing is governed by the
+            # directory, so this gives nothing away.
+            os.fchmod(handle.fileno(), 0o644)
         os.replace(handle.name, path)
     except BaseException:
         Path(handle.name).unlink(missing_ok=True)

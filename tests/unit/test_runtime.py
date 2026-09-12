@@ -63,6 +63,14 @@ class AtomicWrites(support.StubbedCase):
         runtime.write_atomic(target, "second\n")
         self.assertEqual(target.read_text(), "second\n")
 
+    def test_the_written_file_is_readable_for_everyone(self):
+        # The directory is 0755 and both the tmpfiles comment and the docs say
+        # the status can be looked at. The temporary file's own 0600 used to
+        # survive the rename and quietly broke that promise.
+        target = self.runtime_dir / "thing"
+        runtime.write_atomic(target, "content\n")
+        self.assertEqual(target.stat().st_mode & 0o777, 0o644)
+
     def test_no_temporary_file_is_left_behind(self):
         runtime.write_atomic(self.runtime_dir / "thing", "content\n")
         self.assertEqual([p.name for p in self.runtime_dir.iterdir()], ["thing"])
