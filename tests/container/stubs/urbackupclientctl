@@ -1,0 +1,14 @@
+#!/bin/sh
+# Container stub for urbackupclientctl.
+#
+# Answers from the state of the stand-in unit, exactly as the real client does:
+# JSON while its backend runs, a plain-text error line while it does not.
+set -eu
+
+[ "${1:-}" = status ] || { echo "stub urbackupclientctl: unexpected: $*" >&2; exit 2; }
+
+if /usr/bin/systemctl is-active --quiet urbackupclientbackend.service; then
+    printf '{"internet_connected": true, "servers": ["test-server"], "running_processes": []}\n'
+else
+    echo "Error getting status"
+fi

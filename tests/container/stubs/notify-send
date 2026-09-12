@@ -1,0 +1,9 @@
+#!/bin/sh
+# Container stub for notify-send.
+#
+# There is no notification server here, and the real one would block until the
+# notification is clicked or times out. Recording the arguments lets the tests
+# assert which buttons were offered; exiting without output means "no action
+# chosen", which is what a timeout looks like to the daemon.
+set -eu
+printf '%s\n' "$*" >>/run/urbackup-gated-test/notify-send.log
