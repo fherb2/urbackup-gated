@@ -16,9 +16,15 @@ Stufe 3, beschrieben in der Implementierungsdoku unter „Stufe 3: Abnahme von H
 - Der Installer stoppt und deaktiviert `urbackupclientbackend` wie vorgesehen.
 - **Punkt 3 (echter Netzwechsel):** Wechsel von `lieluxVPN` auf `lieluX` hat den Client gestartet, Meldung kam, Serververbindung wurde gemeldet.
 
-**Noch offen:** Punkt 1 (Schaltflächen und Anzeigedauer), Punkt 2 (Live-Fenster), Punkt 4 (Dockingstation), Punkt 5 (Handschalter), Punkt 6 (Fehlerfenster des Fail-safe), Punkt 7 (Abmelden), Punkt 8 (erstes echtes Backup).
+Aus einer Testsicherung am 12. September 2026, aufgenommen als Bildschirmkopien für die README, kommt dazu:
 
-Punkt 8 bleibt die **einzige inhaltlich offene Annahme** des Vorhabens: Ob die Fortschrittszahlen aus `urbackupclientctl status` stimmen, zeigt erst die erste echte Sicherung.
+- **Punkt 8, rechnerischer Teil: bestanden.** Gegen einen echten Client stimmen die Fortschrittszahlen — 6922 bzw. 10255 von 691093 MiB ergeben die angezeigten 1,0 % und 1,5 %. Die Felder `done_bytes` und `total_bytes` werden also richtig gelesen und umgerechnet.
+- **Punkt 1, Schaltflächen: bestanden.** Die Meldung trägt `Details` und `Deactivate`, letzteres passend zum damaligen Nutzer-Zustand.
+- **Punkt 2, Inhalt des Live-Fensters: bestanden.** Das Fenster öffnet sich und zeigt Netzlage, Entscheidung samt Begründung und Client-Zustand vollständig.
+
+**Noch offen:** Punkt 1 (Anzeigedauer und ihr Pausieren unter dem Mauszeiger), Punkt 2 (Überschreiben statt Anwachsen, Unterdrücken der Meldungen), Punkt 4 (Dockingstation), Punkt 5 (Handschalter), Punkt 6 (Fehlerfenster des Fail-safe), Punkt 7 (Abmelden), Punkt 8 (Geschwindigkeitsangabe).
+
+Von Punkt 8 bleibt damit nur noch die **Geschwindigkeitsangabe** offen, und sie ist die einzige inhaltlich offene Annahme des Vorhabens. Bei der Testsicherung standen 0,05 bzw. 0,01 MB/s an, während der Fortschritt zwischen beiden Aufnahmen um 3333 MiB wuchs. Das muss kein Fehler sein: `done_bytes` kann verarbeitete statt übertragener Daten zählen, was bei einer deduplizierenden Vollsicherung den Unterschied erklärt. Zu klären nur durch einen Blick in die rohe JSON-Ausgabe im selben Moment, in dem die Anzeige gelesen wird.
 
 ## Zurückgestellt
 
