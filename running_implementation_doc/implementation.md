@@ -284,6 +284,10 @@ Geschrieben wird die Datei atomar wie die Kommandodatei (siehe „Manuelles Akti
 - Wenn eine Sicherung läuft: alle 15 Minuten (konfigurierbar) ein kurzer Fortschrittsstatus.
 - Anzeigedauer 5 Sekunden, konfigurierbar.
 
+**Eine zurückgehaltene Meldung gilt nicht als erledigt.** Ein `notify-send`-Aufruf mit Schaltflächen blockiert bis zum Klick oder bis der Notification-Server die Meldung schließt; solange geht keine zweite hinaus. Wird ein Zustandswechsel deshalb zurückgehalten, bleibt der gemerkte Vorzustand **stehen**, sodass derselbe Wechsel beim nächsten Takt erneut versucht wird. Andernfalls wäre er nicht verspätet, sondern endgültig verloren — und niemand erführe davon. Der Verwurf selbst geht ins Journal.
+
+**Davon ausgenommen ist das offene Statusfenster.** Dort ist die Unterdrückung gewollt, weil der Status ohnehin sichtbar ist; würde auch hier zurückgehalten, käme nach dem Schließen ein Schwall veralteter Meldungen.
+
 **Ein dritter Zustand, der keinen Wechsel auslöst:** Antwortet `urbackupclientctl status` nicht verwertbar — der Regelfall, sobald der Client-Dienst gestoppt ist —, sind Serververbindung und Sicherungslauf nicht „nein", sondern **unbekannt**. Unbekannt ist keiner der beiden Zustände, zwischen denen die obigen Wechselmeldungen unterscheiden; der Übergang in ihn hinein und aus ihm heraus wird deshalb nicht gemeldet. Ohne diese Festlegung folgt auf jeden netzbedingten Stopp im nächsten Takt eine Meldung über einen Serververlust, den es nicht gab — der Dienst hat den Client ja selbst angehalten. Der Preis ist ausdrücklich benannt: Nach einem Start des Clients entfällt die Folgemeldung „Server verbunden"; dass der Client gestartet wurde, steht bereits in der Meldung desselben Takts, und bleibt der Server unerreichbar, nennt das die Ruhemeldung.
 
 Datenquelle für Serververbindung/Sicherungsfortschritt: `urbackupclientctl status`

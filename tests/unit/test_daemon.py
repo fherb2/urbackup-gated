@@ -207,6 +207,37 @@ class BlockingNotification(ReportingCase):
         self.released.wait(10)
         return None
 
+    def test_a_held_back_change_is_retried_instead_of_lost(self):
+        # The previous state used to move on regardless, so a change that could
+        # not be sent was gone for good - not late, gone.
+        self.backend(True)
+        self.tick()
+        self.notifications.clear()
+
+        # First change: goes out and blocks on screen.
+        self.set_client_status({"internet_connected": False, "servers": []})
+        self.daemon._report(state.gather(self.config), None)
+        self.assertTrue(self.entered.wait(5))
+        self.assertEqual(len(self.notifications), 1)
+
+        # Second change while the first still hangs: has to be held back.
+        self.backend(True)
+        self.daemon._report(state.gather(self.config), None)
+        self.assertEqual(len(self.notifications), 1, "the second one slipped through")
+
+        # Release the first; the second must still be pending, not forgotten.
+        self.released.set()
+        self._await_threads()
+        self.daemon._report(state.gather(self.config), None)
+        self._await_threads()
+        self.assertEqual(len(self.notifications), 2, "the held-back change was lost")
+        self.assertIn("connected", self.notifications[1][0])
+
+    def _await_threads(self) -> None:
+        for thread in threading.enumerate():
+            if thread is not threading.current_thread():
+                thread.join(timeout=5)
+
     def test_reporting_returns_while_the_notification_is_still_open(self):
         self.backend(True)
         self.tick()

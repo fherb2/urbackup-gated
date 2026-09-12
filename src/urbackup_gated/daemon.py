@@ -158,32 +158,42 @@ class Daemon:
     def _report(self, status: dict, action: str | None) -> None:
         client_view = status["urbackup_client"]
         previous = self._previous_client
-        self._previous_client = client_view
 
         # While the status window is open the notifications would only repeat
-        # what is already on screen.
+        # what is already on screen. The previous state moves on regardless:
+        # here the suppression is intended, and holding the changes back would
+        # produce a burst of stale messages the moment the window closes.
         if self._window is not None:
+            self._previous_client = client_view
             return
 
+        # Everywhere else the previous state only moves on once the change has
+        # actually been reported. A notification that was held back because
+        # another one still hangs on screen is retried on the next tick instead
+        # of being lost for good.
         if action is not None:
             reason = status["decision"]["reason"]
-            self._notify(f"UrBackup client {action}", reason, status)
+            if self._notify(f"UrBackup client {action}", reason, status):
+                self._previous_client = client_view
             return
 
         if previous is not None:
             if _known_change(previous["server_connected"], client_view["server_connected"]):
                 connected = client_view["server_connected"]
-                self._notify(
+                if self._notify(
                     "UrBackup server connected" if connected else "UrBackup server lost",
                     status["decision"]["reason"],
                     status,
-                )
+                ):
+                    self._previous_client = client_view
                 return
             if _known_change(previous["backup_running"], client_view["backup_running"]):
                 summary, body = state.notify_summary(status)
-                self._notify(summary, body, status)
+                if self._notify(summary, body, status):
+                    self._previous_client = client_view
                 return
 
+        self._previous_client = client_view
         self._report_periodic(status)
 
     def _report_periodic(self, status: dict) -> None:
@@ -202,10 +212,19 @@ class Daemon:
         summary, body = state.notify_summary(status)
         self._notify(summary, body, status)
 
-    def _notify(self, summary: str, body: str, status: dict) -> None:
-        """Send a notification from a worker thread, since the call blocks."""
+    def _notify(self, summary: str, body: str, status: dict) -> bool:
+        """Send a notification from a worker thread, since the call blocks.
+
+        Returns whether it went out. A notification that blocks on screen keeps
+        the next one from being sent, and the caller has to know that so the
+        state change is not booked as reported.
+        """
         if self._notify_in_flight:
-            return
+            print(
+                f"notification held back, one is still open: {summary}",
+                file=sys.stderr,
+            )
+            return False
         self._notify_in_flight = True
 
         actions = {ui.ACTION_DETAILS: "Details"}
@@ -220,6 +239,7 @@ class Daemon:
             args=(summary, body, timeout, actions),
             daemon=True,
         ).start()
+        return True
 
     def _notify_worker(
         self, summary: str, body: str, timeout: int, actions: dict[str, str]
