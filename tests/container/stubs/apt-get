@@ -1,0 +1,28 @@
+#!/bin/sh
+# Container stub for apt-get.
+#
+# install.sh offers to install its own runtime packages. Really installing yad
+# would drag GTK and its dependency tree into the image for no gain - nothing is
+# ever displayed in here. The stub records the call and puts a dummy in place,
+# so from the installer's side the outcome is indistinguishable.
+set -eu
+
+printf '%s\n' "$*" >>/run/urbackup-gated-test/apt-get.log
+
+case "$*" in
+    *install*) ;;
+    *) exit 0 ;;
+esac
+
+for word in "$@"; do
+    case "$word" in
+        yad) program=yad ;;
+        libnotify-bin) program=notify-send ;;
+        *) continue ;;
+    esac
+    # Never replace a stub that is already in place: notify-send is the
+    # recording one the notification checks read.
+    [ -e "/usr/local/bin/$program" ] && continue
+    printf '#!/bin/sh\nexit 0\n' >"/usr/local/bin/$program"
+    chmod 0755 "/usr/local/bin/$program"
+done

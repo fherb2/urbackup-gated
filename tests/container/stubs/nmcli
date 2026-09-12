@@ -1,0 +1,33 @@
+#!/bin/sh
+# Container stub for nmcli.
+#
+# The scenario is a single word in /run/urbackup-gated-test/scenario, so the
+# test can switch the pretended network without restarting anything and without
+# passing environment through to the daemon.
+set -eu
+
+scenario=$(cat /run/urbackup-gated-test/scenario 2>/dev/null || echo ethernet)
+
+case "$*" in
+    *"device status"*)
+        case "$scenario" in
+            ethernet)
+                printf 'eth0:ethernet:connected:Wired\nlo:loopback:connected:lo\n' ;;
+            allowed_wifi|forbidden_wifi)
+                printf 'wlan0:wifi:connected:profile\nlo:loopback:connected:lo\n' ;;
+            nothing)
+                printf 'eth0:ethernet:disconnected:\nlo:loopback:connected:lo\n' ;;
+            *)
+                echo "stub nmcli: unknown scenario: $scenario" >&2; exit 2 ;;
+        esac
+        ;;
+    *"device wifi"*)
+        case "$scenario" in
+            allowed_wifi)   printf 'yes:616C6C6F7765642D6E6574:wlan0\n' ;;
+            forbidden_wifi) printf 'yes:70686F6E652D686F7473706F74:wlan0\n' ;;
+            *)              printf '' ;;
+        esac
+        ;;
+    *)
+        echo "stub nmcli: unexpected invocation: $*" >&2; exit 2 ;;
+esac

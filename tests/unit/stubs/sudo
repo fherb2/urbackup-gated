@@ -1,0 +1,6 @@
+#!/bin/sh
+# Test stub for sudo: drops -n and runs the rest, so the whole chain the daemon
+# builds is exercised instead of being mocked away.
+set -eu
+[ "${1:-}" = -n ] && shift || true
+exec "$@"

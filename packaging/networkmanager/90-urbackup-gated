@@ -1,0 +1,20 @@
+#!/bin/sh
+# NetworkManager dispatcher hook for urbackup-gated. Runs as root.
+#
+# $1 is the interface, $2 the action. All this does is touch a trigger file that
+# the daemon watches, which keeps root out of the daemon's session entirely.
+set -eu
+
+# vpn-up and vpn-down are deliberately absent: urbackup-gated judges physical
+# connections only, so a tunnel coming and going is none of its business.
+case "${2:-}" in
+    up|down|dhcp4-change|dhcp6-change|connectivity-change) ;;
+    *) exit 0 ;;
+esac
+
+trigger=/run/urbackup-gated/network-event
+
+# No runtime directory means the service is not installed for a logged-in user.
+[ -d /run/urbackup-gated ] || exit 0
+
+touch "$trigger" 2>/dev/null || exit 0
