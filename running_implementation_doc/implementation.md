@@ -535,4 +535,24 @@ _Noch nicht ausgearbeitet._
 
 # Anhang
 
-_Noch nicht ausgearbeitet._
+## Code-Review vom 12. September 2026
+
+Geprüft wurde der Stand `5d813c6` auf `claude-workbench` durch eine zweite, unbeteiligte Instanz.
+
+**Umfang:** alles Versionierte — die acht Python-Module unter `src/urbackup_gated/`, `install.sh`, `uninstall.sh`, die fünf Dateien unter `packaging/`, die Unit-Suite samt Attrappen und Szenarien, die Container-Stufe samt Dockerfile und Attrappen, README, diese Doku, Fahrplan und Status. Am Rechner wurde nur lesend gearbeitet; ausgeführt wurden beide Teststufen (Stufe 1: 101 Tests, Stufe 2: 71 Prüfpunkte, jeweils vollständig bestanden) sowie einige lesende Abfragen.
+
+**Was hier steht und was nicht:** Die aufgeworfenen echten Mängel sind abgestellt; sie werden nicht historisch mitgeführt, das blähte die Doku nur auf. Festgehalten ist ausschließlich, was ein **künftiges Review** sonst erneut als Befund anzeigen würde, obwohl es eine bewusste Entscheidung ist oder bereits geprüft wurde.
+
+### Geprüft, kein Mangel
+
+**`self._wake.clear()` steht nach `wait()`, nicht davor.** Der Einwand lautet, ein Ereignis zwischen beiden Aufrufen gehe verloren. Es geht nicht verloren: `clear()` ist die letzte Anweisung des Schleifendurchlaufs, unmittelbar danach folgt der nächste mit einer vollständigen Neubewertung. Beide Trigger tragen **Zustand** und kein flüchtiges Signal — die Kommandodatei ihren Inhalt, die Netzwerkdatei ihre Existenz —, und beides wird bei jeder Bewertung neu gelesen. Verloren geht höchstens ein überflüssiger Durchlauf.
+
+**Der Rechner als eigener Access Point.** Betreibt das WLAN-Gerät selbst einen Hotspot, steht es auf `connected`, führt aber in `nmcli device wifi list` keinen Eintrag mit `ACTIVE=yes`. Die SSID bleibt damit unbestimmt, und unbestimmt heißt verboten. Das ist die gewollte konservative Richtung, kein Versehen.
+
+**Die Container-Stufe startet den Dienst unmittelbar, nicht über `systemd --user`.** Begründet unter „Stufe 2: Integrationstests im Container". Das Zusammenspiel mit der echten Sitzung ist Gegenstand der Handabnahme.
+
+### Bewusst so und nicht anders
+
+**Segment 2 und 3 dieser Doku bleiben unausgearbeitet.** Nach der allgemeinen Methodik entstünde Segment 3 vor der Implementierung. Für ein Vorhaben dieser Größe wurde am 9. September ausdrücklich entschieden, die Doku nach Segment 1 einzufrieren und daraus heraus zu implementieren. Das ist eine Abweichung mit Ansage, keine Lücke.
+
+**Die Dockingstation-Strenge** — Ethernet und ein fremdes WLAN gleichzeitig, und es wird nicht gesichert — ist der ausdrücklich benannte Preis der Entscheidungsregeln, nicht deren Fehler. Siehe „Preis dieser Entscheidung, ausdrücklich benannt".
