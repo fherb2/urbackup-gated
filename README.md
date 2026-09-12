@@ -43,7 +43,19 @@ sudo ./install.sh
 cd .. && rm -rf urbackup-gated
 ```
 
-That is the whole installation — everything is copied, nothing is linked, so the clone is expendable afterwards. The service runs per user and only while you are logged in.
+Everything is copied and nothing is linked, so the clone is expendable — hence the last line. The service runs per user and only while you are logged in.
+
+**One step is left, and without it no backup runs over Wi-Fi at all.** The shipped configuration carries placeholder network names, so every Wi-Fi counts as untrusted until you list your own in `/etc/urbackup-gated.conf`:
+
+```toml
+allowed_ssids = ["home-wifi", "office-wifi"]
+```
+
+Then restart the service — as yourself, not with `sudo`:
+
+```
+systemctl --user restart urbackup-gated
+```
 
 **Installation options, usage, configuration and removal are described in [the user documentation](packaging/doc/README.md)**, which is installed along with the service to `/usr/local/share/doc/urbackup-gated/README.md`.
 
