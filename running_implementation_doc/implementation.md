@@ -61,8 +61,16 @@ einmal schmerzhaft auffallen:
 
 `urbackupclientbackend.service` wird aus dem automatischen Systemstart genommen
 (`systemctl disable`, nicht `mask`), damit es nicht schon vor der Anmeldung mit
-Root-Rechten hochkommt. Einzige Instanz, die es je startet oder stoppt, ist
-`urbackup-gated`.
+Root-Rechten hochkommt. Im laufenden Betrieb ist `urbackup-gated` die einzige
+Instanz, die den Client startet oder stoppt.
+
+**Mit einer Ausnahme, die zur Einrichtung gehört:** `install.sh` stoppt ihn
+selbst, und zwar mit `disable --now` im selben Zug, in dem es ihn aus dem
+Systemstart nimmt. Läuft zu diesem Zeitpunkt eine Sicherung, wird auch sie
+beendet. Das ist richtig so — der Client soll ab dann nicht mehr ungeprüft
+laufen, und ein Zustand „noch aus der Zeit vor der Installation" wäre genau der,
+den niemand beurteilt hat. Es gehört aber gesagt, damit es nicht als Verstoß
+gegen den Satz davor gelesen wird.
 
 **Ein unbeantwortbarer Unit-Zustand zählt als „läuft".** `systemctl` spricht über D-Bus mit dem System-Manager und kann dort hängen — unter Last oder während der Anmeldephase. Eine solche Abfrage liefert deshalb nicht „ja" oder „nein", sondern einen dritten Wert: **unbekannt**. Gehandelt wird darauf, als liefe der Client. Das ist die einzige Richtung, die in beiden Zweigen trägt: Ist das Netz verboten, wird ein Stopp wenigstens **versucht**; ist es erlaubt, wird lediglich **nicht gestartet**. Die umgekehrte Annahme hätte den gefährlichen Ausgang — ein laufender Client über einem volumenbeschränkten Netz, den niemand anhält. Es ist dieselbe Regel wie bei der Netzlage, nur auf den Client angewandt: Eine verpasste Sicherungsgelegenheit ist unkritisch, eine ungeprüfte Sicherung nicht.
 

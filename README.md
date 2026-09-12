@@ -57,6 +57,11 @@ written. Pass `--yes` to answer that question in advance, for unattended runs.
 and that includes the uninstaller and this document. You may delete the working
 copy once the installation has finished.
 
+The installer takes `urbackupclientbackend.service` out of the system start and
+stops it in the same move, a backup that happens to be running included. From
+then on `urbackup-gated` is the only thing that starts it - which is the whole
+point, but worth knowing before you run the installer mid-backup.
+
 Then review the allow list in `/etc/urbackup-gated.conf`, which is the one
 setting you have to get right:
 
