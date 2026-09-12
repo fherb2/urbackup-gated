@@ -1,46 +1,25 @@
 # Roadmap
 
-1. Fixierung: Konzept wird schrittweise zu verbindlichen Vorgaben.
-2. Segmentierung in die dreigeteilte Implementierungsdoku (zusammengefasst in
-   einem Dokument: Kapitel 1 Zusammenhänge, 2 Vorgaben, 3 Einheiten, plus
-   Anhang) — über den `/segmentierung`-Skill, sobald das Konzept dafür reif
-   ist.
+## 1 Vorgeschriebenes Verhalten ohne Prüfung
 
-   Vorwissen zu diesem Punkt — zwei bereits getroffene Entscheidungen, die
-   ihrer Natur nach nach Segment 2 gehören und dort beim Segmentieren
-   einzusortieren sind, statt sie vorher provisorisch in Kapitel 1 abzulegen:
+Vier Festlegungen der Implementierungsdoku, die im Code umgesetzt, aber von keiner der drei Prüfstufen abgedeckt sind. Jeder Eintrag nennt die Stelle, die ihn vorschreibt — daran ist später erkennbar, dass es um die Absicherung einer Vorgabe geht und nicht um einen nachträglichen Einfall.
 
-   - **Konfigurationsformat: TOML** in `/etc/urbackup-gated.conf` (Endung
-     bleibt `.conf`, Inhalt ist TOML). Gelesen per `tomllib` aus der
-     Standardbibliothek, vorhanden seit Python 3.11 und auf diesem Rechner
-     geprüft (Python 3.12.3); nur lesend, geschrieben wird die
-     Konfiguration nie. Ausschlaggebend war die SSID-Liste: JSON kennt keine
-     Kommentare und die Datei wird von Hand gepflegt; YAML wäre eine
-     zusätzliche Abhängigkeit; INI mit `configparser` kennt keine Listen, man
-     müsste an Kommas trennen — und SSIDs dürfen Kommas, Leerzeichen und
-     Anführungszeichen enthalten, wodurch es irgendwann still falsch würde.
-     TOML hat echte Zeichenketten-Arrays mit sauberer Quotierung, dazu
-     Kommentare und getypte Zahlen für die Intervalle. Schlüssel englisch wie
-     aller Code: `allowed_ssids` als Array, dazu eine Gruppe für die
-     Intervalle (Prüftakt regulär und bei offenem Statusfenster, Abstand der
-     Ruhemeldung, Abstand der Fortschrittsmeldung) und eine für die
-     Anzeigedauer der Notifications.
-   - **Schema von `state.json`**: `schema_version` (damit das Statuswerkzeug
-     eine Datei, die es nicht versteht, ablehnen kann statt sie falsch
-     anzuzeigen), `written_at` als ISO-8601-Zeitstempel mit Zeitzone (daraus
-     berechnet das Statuswerkzeug das geforderte Alter), `network` mit der
-     Liste aller aktiven Verbindungen (Typ, Name, bei WLAN die SSID samt
-     Kennzeichen „erlaubt") plus den abgeleiteten Wahrheitswerten
-     „überhaupt eine Verbindung vorhanden" und „nicht erlaubtes WLAN aktiv",
-     `decision` mit den drei getrennten Wahrheitswerten `network_allows`,
-     `user_enabled` und dem verundeten `effective` sowie `reason` als
-     fertigem, menschenlesbarem Satz, und `urbackup_client` mit Unit-Zustand,
-     Serververbindung, laufender Sicherung und den Fortschrittsfeldern.
-     Wichtigster Entwurfspunkt darin ist `decision.reason`: Der
-     Begründungstext entsteht **einmal** in der Sammelfunktion und wird von
-     Notification, Statusfenster und Kommandozeilenwerkzeug gleichermaßen
-     verwendet — sonst entstehen drei Stellen, die dasselbe in leicht
-     verschiedenen Worten sagen und mit der Zeit auseinanderlaufen.
-     Geschrieben wird die Datei atomar wie die Kommandodatei.
-3. Implementierung inkl. `install.sh`/`uninstall.sh` und README, nach dem
-   Vorbild der UrBackup-eigenen Installationsskripte.
+- **`yad`-Prüfung beim Dienststart.** Der Dienst prüft bei seinem Start, ob `yad` vorhanden ist, und schreibt dessen Fehlen ins Journal. Vorgeschrieben in „Folge daraus, die beim Programmieren nicht untergehen darf" — die Doku markiert diesen Punkt selbst als einen, der nicht untergehen darf.
+- **Alter der Statusangabe.** Das Kommandozeilenwerkzeug zeigt an, wie lange das letzte Schreiben der Datei her ist. Vorgeschrieben in „Zustand, Merken zwischen Aufrufen und Statusabfrage", dritter Verwendungszweck der Sammelfunktion.
+- **Ablehnung einer unverstandenen `schema_version`.** Das Werkzeug soll eine Datei, die es nicht versteht, ablehnen statt sie falsch anzuzeigen. Vorgeschrieben in „Schema von `state.json`". Geprüft wird heute nur, dass die Version geschrieben wird — nie, dass eine falsche zurückgewiesen wird.
+- **Blockierender Notify-Aufruf.** Er darf die Prüfschleife nicht anhalten, weshalb er in einem eigenen Thread läuft. Vorgeschrieben in „Konsequenz für die Umsetzung: Da dieser Aufruf blockiert…". Der Container-Stub für `notify-send` kehrt sofort zurück, blockiert also nie — der Fall wird von keiner Stufe erzeugt.
+
+## 2 Abnahme von Hand
+
+Stufe 3 der Prüfung, neun Punkte, beschrieben in der Implementierungsdoku unter „Stufe 3: Abnahme von Hand". Sie steht aus, bis das Werkzeug auf dem Zielrechner installiert ist.
+
+Punkt 9 darin ist die **einzige inhaltlich offene Annahme** der Implementierung: Die genaue JSON-Struktur von `urbackupclientctl status` konnte nicht verifiziert werden, weil das Client-Backend beim Programmieren nicht lief. Der Parser deckt beide plausiblen Formen ab und fällt sonst geordnet auf „nicht erreichbar" zurück — ob die Zahlen stimmen, zeigt erst die erste echte Sicherung.
+
+## 3 Zwei Abnahmepunkte, die ohne Desktop automatisierbar wären
+
+Stufe 3 begründet sich damit, dass sie einen Menschen an einem echten Desktop braucht. Auf zwei ihrer Punkte trifft das nicht zu; sie liefen im Container:
+
+- **Selbstheilung** (Punkt 7): `systemctl enable urbackupclientbackend`, Dienst neu starten, prüfen dass er wieder deaktiviert ist. Braucht weder Anzeige noch Funkgerät. Der Container prüft das heute auch nicht nebenbei mit — dort hat `install.sh` bereits deaktiviert, der Zweig läuft nie durch.
+- **Fail-safe** (Punkt 6), soweit nicht optisch: Rückgabewert 78, Client gestoppt, kein Neustart in der Schleife. Nur das Fehlerfenster selbst braucht einen Menschen.
+
+Offen als Entscheidung, nicht als Aufgabe: ob das umgezogen wird oder in Stufe 3 bleibt.

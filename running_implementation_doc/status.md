@@ -1,7 +1,25 @@
 # Status
 
+Abgearbeitete Fahrplaneinträge, chronologisch. Begründungen stehen nicht hier, sondern im zuständigen Kapitel der Implementierungsdoku.
+
+## Findung und Fixierung
+
 - GitHub-Repo angelegt und nach `~/git/urbackup-gated` geklont.
 - Branches `dev` (Hauptpfad) und `claude-workbench` (Werkbank) angelegt.
 - Dienstname festgelegt: `urbackup-gated`.
-- Konzeptdatei nach `running_implementation_doc/concept.md` verschoben.
 - Roadmap und Status aus dem Konzept in eigene Dateien ausgelagert.
+- Konzept in Segment 1 der `implementation.md` eingearbeitet, `concept.md` dabei gelöscht.
+- Fixierung abgeschlossen: Systemintegration und Rechteaufteilung, Fail-safe bei kaputter Konfiguration, Protokollierung, Testbarkeit über `state.json`, Netzwerk-Ereigniserkennung, SSID-Abfrage, Live-Statusfenster mit `yad`, Entscheidungsregeln, manueller Nutzer-Zustand, Auslösepunkte, Ablageort und Kommandodatei-Protokoll.
+
+## Implementierung
+
+- Dienst, Kommandozeilenwerkzeug, Installations- und Deinstallationsroutinen, Packaging und README.
+- Unit-Suite (Stufe 1) und Container-Integrationstests (Stufe 2), Abnahme von Hand (Stufe 3) in der Doku beschrieben.
+
+## Nacharbeit nach der ersten Prüfung des Gesamtstands
+
+- Meldelogik korrigiert: Ein nicht erreichbares Backend gilt nicht mehr als Zustandswechsel, wodurch nach jedem netzbedingten Stopp eine falsche Meldung über einen Serververlust entfiel. Erste Unit-Tests der Meldelogik.
+- Installer bietet fehlende Laufzeitpakete (`yad`, `libnotify-bin`) zur Nachinstallation an, statt abzubrechen; Schalter `--yes` für unbeaufsichtigte Läufe.
+- Container-Stufe erstmals lauffähig gemacht — sie war seit ihrer Entstehung nie ausgeführt worden.
+- Drei falsch-grüne Prüfpunkte der Container-Stufe gehärtet.
+- TOML-Festlegung und Schema von `state.json` aus der Roadmap in die Implementierungsdoku überführt; Roadmap auf die offenen Punkte zurückgeschnitten.

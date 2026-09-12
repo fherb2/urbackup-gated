@@ -203,6 +203,14 @@ Der manuelle Nutzer-Zustand ist Teil des vollständigen Status und wird in `stat
 
 Die eigentliche Ermittlungslogik existiert damit nur ein einziges Mal im Code.
 
+### Schema von `state.json`
+
+**Festgelegt:** `schema_version` — damit das Statuswerkzeug eine Datei, die es nicht versteht, ablehnen kann, statt sie falsch anzuzeigen. `written_at` als ISO-8601-Zeitstempel **mit Zeitzone**; daraus berechnet das Statuswerkzeug das geforderte Alter der Angabe. `network` mit der Liste aller aktiven Verbindungen (Typ, Name, bei WLAN die SSID samt Kennzeichen „erlaubt") plus den abgeleiteten Wahrheitswerten „überhaupt eine Verbindung vorhanden" und „nicht erlaubtes WLAN aktiv". `decision` mit den drei getrennten Wahrheitswerten `network_allows`, `user_enabled` und dem verundeten `effective`, dazu `reason` als fertigem, menschenlesbarem Satz. `urbackup_client` mit Unit-Zustand, Serververbindung, laufender Sicherung und den Fortschrittsfeldern.
+
+**Wichtigster Entwurfspunkt darin ist `decision.reason`:** Der Begründungstext entsteht **einmal** in der Sammelfunktion und wird von Notification, Statusfenster und Kommandozeilenwerkzeug gleichermaßen verwendet. Sonst entstehen drei Stellen, die dasselbe in leicht verschiedenen Worten sagen und mit der Zeit auseinanderlaufen.
+
+Geschrieben wird die Datei atomar wie die Kommandodatei (siehe „Manuelles Aktivieren und Deaktivieren").
+
 ## Notify-Meldungen
 
 - Beim tatsächlichen Starten des UrBackup-Clients.
@@ -331,6 +339,14 @@ erlaubter SSIDs, konfigurierbare Zeiten / Intervalle, soweit sie einstellbar sei
 Aktuell genannte SSIDs: `lieluX`, `lielux`, `lieluxVPN`, `HZDR` — geklärt: kein
 Tippfehler, `lieluX` und `lielux` sind zwei tatsächlich unterschiedliche, echte
 Netze. Vergleich bleibt case-sensitiv. Diese SSIDs werden schon im Repo als Beispiel so benutzt.
+
+### Format: TOML
+
+**Festgelegt:** Die Datei heißt weiterhin `/etc/urbackup-gated.conf`, ihr Inhalt ist **TOML**. Gelesen wird sie mit `tomllib` aus der Standardbibliothek — vorhanden seit Python 3.11, auf diesem Rechner geprüft (3.12.3). Nur lesend; geschrieben wird die Konfiguration nie.
+
+**Ausschlaggebend war die SSID-Liste.** JSON kennt keine Kommentare, und die Datei wird von Hand gepflegt. YAML wäre eine zusätzliche Abhängigkeit. INI mit `configparser` kennt keine Listen — man müsste an Kommas trennen, und SSIDs dürfen Kommas, Leerzeichen und Anführungszeichen enthalten, wodurch es irgendwann still falsch würde. TOML hat echte Zeichenketten-Arrays mit sauberer Quotierung, dazu Kommentare und getypte Zahlen für die Intervalle.
+
+**Schlüssel englisch wie aller Code:** `allowed_ssids` als Array, dazu eine Gruppe für die Intervalle (Prüftakt regulär und bei offenem Statusfenster, Abstand der Ruhemeldung, Abstand der Fortschrittsmeldung) und eine für die Anzeigedauer der Notifications. Alles außer `allowed_ssids` ist optional und fällt auf Vorgabewerte zurück; fehlerhafte Werte sind dagegen ein Fehler und lösen den Fail-safe aus (s. u.).
 
 ### Fail-safe bei fehlender/kaputter Konfiguration
 
