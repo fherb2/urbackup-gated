@@ -23,3 +23,10 @@ Abgearbeitete Fahrplaneinträge, chronologisch. Begründungen stehen nicht hier,
 - Container-Stufe erstmals lauffähig gemacht — sie war seit ihrer Entstehung nie ausgeführt worden.
 - Drei falsch-grüne Prüfpunkte der Container-Stufe gehärtet.
 - TOML-Festlegung und Schema von `state.json` aus der Roadmap in die Implementierungsdoku überführt; Roadmap auf die offenen Punkte zurückgeschnitten.
+
+## Phase 1 und 2 der Nacharbeit
+
+- Installation selbsttragend gemacht: Deinstaller und Anwenderdokumentation landen im System, ein Manifest steuert die Deinstallation, die User-Unit liegt unter `/usr/local/lib/systemd/user`, die Konfigurationsdatei trägt eine Kurzanleitung.
+- Kapitel „Installation und Deinstallation" mit der Definition der Ordnerstruktur aufgenommen.
+- Die vier vorgeschriebenen, bis dahin ungeprüften Verhaltensweisen mit Unit-Tests abgedeckt; Selbstheilung und der nicht-optische Teil des Fail-safe aus der Handabnahme in den Container gezogen.
+- Pufferung der Dienstausgabe abgeschaltet: Ohne das erreichte keine Meldung das Journal, solange der Dienst lief.

@@ -268,10 +268,57 @@ grep -qE 'deactivate=Deactivate|activate=Activate' "$TESTDIR/notify-send.log" \
     && ok "notifications offer the manual switch" \
     || no "notifications offer the manual switch"
 
-section "shutdown and removal"
+section "shutdown"
 pkill -u "$SERVICE_USER" -f urbackup_gated.daemon
 check "the client is stopped when the daemon exits" wait_until 15 client_inactive
 
+section "self healing and fail-safe"
+# Both were listed under the manual acceptance, although neither needs a display
+# or a radio. The scenario is "nothing" at this point, so the network verdict is
+# "no decision" and the daemon leaves the client alone - which keeps these two
+# checks about what they are meant to be about.
+
+# The UrBackup installer re-enables its own service on every run. Undoing that at
+# every start is what the third sudoers entry exists for, and until now no test
+# ever walked through that branch: install.sh had already disabled it.
+systemctl enable "$CLIENT_UNIT" >/dev/null 2>&1
+check "precondition: the client unit is enabled again" \
+    systemctl is-enabled --quiet "$CLIENT_UNIT"
+
+: >"$TESTDIR/healing.log"
+runuser -u "$SERVICE_USER" -- /usr/local/bin/urbackup-gated \
+    >"$TESTDIR/healing.log" 2>&1 &
+healing_pid=$!
+check "the daemon disables the client unit again at startup" \
+    wait_until 20 sh -c '! systemctl is-enabled --quiet '"$CLIENT_UNIT"
+grep -q "was enabled at boot" "$TESTDIR/healing.log" \
+    && ok "the daemon says so in its log" \
+    || no "the daemon says so in its log"
+kill "$healing_pid" 2>/dev/null
+wait "$healing_pid" 2>/dev/null
+
+# A broken configuration must stop the client and end the daemon in a way that
+# systemd can tell from an ordinary failure, so it does not restart into the
+# same error dialog every few seconds. Only the dialog itself needs a human.
+cp /etc/urbackup-gated.conf "$TESTDIR/config.backup"
+echo 'allowed_ssids = [' >/etc/urbackup-gated.conf
+systemctl start "$CLIENT_UNIT" >/dev/null 2>&1
+check "precondition: the client is running before the fail-safe" client_active
+
+runuser -u "$SERVICE_USER" -- /usr/local/bin/urbackup-gated \
+    >"$TESTDIR/failsafe.log" 2>&1
+failsafe_code=$?
+[ "$failsafe_code" -eq 78 ] \
+    && ok "a broken configuration ends the daemon with the agreed exit code" \
+    || no "a broken configuration ends the daemon with the agreed exit code (got $failsafe_code)"
+check "the fail-safe stops the client" client_inactive
+grep -q "configuration error" "$TESTDIR/failsafe.log" \
+    && ok "the fail-safe names the cause" \
+    || no "the fail-safe names the cause"
+
+cp "$TESTDIR/config.backup" /etc/urbackup-gated.conf
+
+section "removal"
 # Absence after the uninstall only says something if the files were there
 # beforehand. Asserted here rather than relying on the installation section:
 # the entire operating section lies in between.

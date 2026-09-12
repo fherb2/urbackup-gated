@@ -5,6 +5,8 @@ false. Treating that as a state change turned every gated stop into a second,
 untrue message about a lost server connection one tick later.
 """
 
+import contextlib
+import io
 import threading
 import time
 import unittest
@@ -148,6 +150,88 @@ class GatedStop(ReportingCase):
         self.tick()
 
         self.assertEqual(self.summaries(), ["UrBackup client stopped"])
+
+
+class StartupChecks(ReportingCase):
+    """What run() does before and around the loop.
+
+    The stop event is set beforehand, so the loop ends after its first pass and
+    run() gets to its shutdown half. That makes the startup half observable.
+    """
+
+    def run_once(self) -> str:
+        """Run the daemon through one pass and return what it wrote to stderr."""
+        self.daemon.request_stop()
+        captured = io.StringIO()
+        with contextlib.redirect_stderr(captured), contextlib.redirect_stdout(io.StringIO()):
+            self.daemon.run()
+        return captured.getvalue()
+
+    def test_a_missing_yad_is_reported(self):
+        # Without this the one message that explains a broken state would be the
+        # message that goes missing.
+        self.patch(ui, "yad_available", lambda: False)
+        self.assertIn("yad", self.run_once())
+
+    def test_a_present_yad_is_not_reported(self):
+        self.patch(ui, "yad_available", lambda: True)
+        self.assertNotIn("yad", self.run_once())
+
+    def test_the_manual_flag_is_cleared_at_startup(self):
+        # "Activated at every service start" is implemented by deleting the file.
+        from urbackup_gated import runtime
+
+        runtime.set_user_enabled(False)
+        self.patch(ui, "yad_available", lambda: True)
+        self.run_once()
+        self.assertFalse(runtime.USER_ENABLED_FILE.exists())
+
+
+class BlockingNotification(ReportingCase):
+    """A notification blocks until it is clicked or times out.
+
+    If that call sat in the main loop, the whole check would stand still for as
+    long as a notification hangs unanswered on screen.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.released = threading.Event()
+        self.entered = threading.Event()
+        self.patch(ui, "notify", self._blocking_notify)
+        self.addCleanup(self.released.set)
+
+    def _blocking_notify(self, summary, body, timeout, actions):
+        self.notifications.append((summary, body))
+        self.entered.set()
+        self.released.wait(10)
+        return None
+
+    def test_reporting_returns_while_the_notification_is_still_open(self):
+        self.backend(True)
+        self.tick()
+        # A state change the daemon has to report, so a notification is sent.
+        self.set_client_status({"internet_connected": False, "servers": []})
+        status = state.gather(self.config)
+
+        reported = threading.Event()
+
+        def report():
+            self.daemon._report(status, None)
+            reported.set()
+
+        threading.Thread(target=report, daemon=True).start()
+
+        self.assertTrue(self.entered.wait(5), "the notification was never sent")
+        # The decisive assertion: the notification is provably still hanging, and
+        # the caller is already back. A synchronous notify would fail right here.
+        self.assertTrue(
+            reported.wait(5),
+            "_report stayed inside the notification instead of handing it to a thread",
+        )
+        self.assertFalse(self.released.is_set(), "the notification ended by itself")
+
+        self.released.set()
 
 
 class KnownChange(unittest.TestCase):

@@ -428,6 +428,8 @@ Festgelegt: normale Ausgabe auf stdout/stderr, kein eigenes Logfile. Landet
 dadurch automatisch im systemd-Journal (`journalctl --user -u urbackup-gated`)
 und braucht keine eigene Rotation/Aufräumlogik. Fehleranzeige bei `systemctl --user status urbackup-gated` — mit `--user`, da es ein Dienst der Nutzersitzung ist und der Befehl ohne diese Option den System-Manager abfragen würde, der die Unit gar nicht kennt.
 
+**Ungepuffert, und das ist Bedingung, nicht Feinheit:** Python puffert die Standardausgabe blockweise, sobald sie kein Terminal ist — unter systemd ist sie immer eine Pipe. Ohne Gegenmaßnahme bliebe das Journal leer, bis der Puffer voll ist oder der Dienst endet. Bei einem Dienst, der tagelang läuft und dessen einziger Diagnosekanal das Journal ist, wäre die Festlegung „landet automatisch im Journal" damit schlicht unwahr. Das Startskript, das `install.sh` erzeugt, schaltet die Pufferung deshalb ab. Der Ort ist bewusst das Startskript und nicht die Unit: So gilt es auch für den Aufruf von Hand bei der Fehlersuche, und nicht nur unter systemd. Eine Prüfung in Stufe 2 sichert das ab — gefunden wurde es genau dort, nachdem eine erwartete Zeile im Protokoll fehlte, obwohl die zugehörige Handlung nachweislich stattgefunden hatte.
+
 ## Technische Bausteine
 
 Festgelegt: Sprache **Python**.
@@ -490,6 +492,8 @@ Die Prüfung ist in drei Stufen geteilt, weil sich die drei nach ihren Vorausset
 
 Abgedeckt: die vollständige Entscheidungsmatrix, das Zerlegen der nmcli-Ausgabe samt Escaping, die Konfigurationsprüfung mit ihren Ablehnungen, die Flag-Semantik samt atomarem Schreiben, das Parsen des Client-Status in beiden Ausgabeformen, die Textaufbereitung und die Meldelogik des Dienstes — welcher Zustandswechsel eine Meldung auslöst und welcher nicht (s. „Ein dritter Zustand, der keinen Wechsel auslöst").
 
+Dazu vier Festlegungen, die lange nur im Code standen und von nichts geprüft wurden: die `yad`-Prüfung beim Dienststart samt ihrer Meldung; das Löschen des Nutzer-Flags beim Start, aus dem sich „bei jedem Dienststart aktiviert" ergibt; die Anzeige des Alters der Statusangabe und die Ablehnung einer unverstandenen `schema_version` durch das Kommandozeilenwerkzeug; und dass ein blockierender Notify-Aufruf die Prüfschleife nicht anhält — geprüft mit einer Attrappe, die **wirklich** blockiert, bis der Test sie freigibt, statt über eine Zeitmessung.
+
 Die Meldelogik liegt im Dienstmodul, das für die Verzeichnisüberwachung `watchdog` braucht. Damit Stufe 1 ihre Zusage „ohne zusätzliche Pakete" hält, setzt die Testunterstützung dafür Platzhalter ein, solange das Paket fehlt, und benutzt das echte, sobald es installiert ist — geprüft wird so oder so der unveränderte Dienstcode, denn die Meldelogik rührt `watchdog` nicht an.
 
 Dass die Tests wirklich greifen, ist selbst geprüft: Sieben absichtlich eingebaute Fehler — Ethernet hebelt verbotenes WLAN aus, Nutzer-Einspruch wird ignoriert, Profilname statt SSID, WLAN-Scan nicht mehr unterdrückt, `running_processes` nicht mehr gelesen, Loopback zählt als Verbindung, Zeitstempel ohne Zeitzone — wurden alle sieben erkannt.
@@ -502,7 +506,7 @@ Gefälscht wird darin ausschließlich, was ein Container prinzipiell nicht kann 
 
 Weil NetworkManager nur durch den `nmcli`-Stub vertreten ist, fehlt auch das Verzeichnis, das er sonst mitbrächte — `/etc/NetworkManager/dispatcher.d`. Der Testaufbau legt es deshalb selbst an. Das ist keine Feinheit: `install.sh` legt seinen Dispatcher-Hook dort ab und erzeugt keine übergeordneten Verzeichnisse, bricht also ohne dieses eine `mkdir` mitten im Lauf ab und reißt jeden folgenden Prüfpunkt mit.
 
-Was im Einzelnen geprüft wird, steht in `tests/container/inside/run.sh` — jeder Prüfpunkt trägt dort seinen Klartext. Hier wird es absichtlich **nicht** aufgezählt: Eine zweite Fassung derselben Liste in Prosa veraltet still, sobald sich ein Prüfpunkt ändert, und niemand merkt es. Der Gegenstand der Stufe lässt sich in einem Satz sagen — alles, was root und ein Wegwerf-System braucht: Installation und Deinstallation, die Enge der sudoers-Freigabe, der Aktionsfilter des Dispatchers, und das Gating von Ende zu Ende über die Trigger-Dateien.
+Was im Einzelnen geprüft wird, steht in `tests/container/inside/run.sh` — jeder Prüfpunkt trägt dort seinen Klartext. Hier wird es absichtlich **nicht** aufgezählt: Eine zweite Fassung derselben Liste in Prosa veraltet still, sobald sich ein Prüfpunkt ändert, und niemand merkt es. Der Gegenstand der Stufe lässt sich in einem Satz sagen — alles, was root und ein Wegwerf-System braucht: Installation und Deinstallation, die Enge der sudoers-Freigabe, der Aktionsfilter des Dispatchers, das Gating von Ende zu Ende über die Trigger-Dateien, die Selbstheilung nach einer Neuinstallation des UrBackup-Clients, und der Fail-safe bis auf sein Fehlerfenster.
 
 Das Image bringt `yad` bewusst **nicht** mit; geprüft wird gerade, dass der Installer dessen Fehlen erkennt und die Nachinstallation anbietet (s. „Zweite Folge, den Installer betreffend"). Der Paketmanager ist dafür wie `nmcli` und `notify-send` durch einen mitschreibenden Stub ersetzt — echtes `yad` zöge GTK ins Image, ohne dass darin je etwas angezeigt würde.
 
@@ -517,10 +521,9 @@ Was hier steht, ist der Rest, der sich nicht sinnvoll automatisieren lässt: die
 3. **Echter Netzwechsel.** Vom erlaubten Netz auf den Handy-Hotspot wechseln. Erwartet: Der Client stoppt binnen 30 Sekunden, und die Meldung nennt die SSID als Grund. Zurück ins erlaubte Netz: Der Client startet wieder.
 4. **Dockingstation-Strenge.** Ethernet und ein fremdes WLAN gleichzeitig aktiv. Erwartet: Es wird **nicht** gesichert — das ist der bewusst gewählte Preis. WLAN abschalten: Es läuft wieder.
 5. **Handschalter.** Deaktivieren über die Schaltfläche und über `urbackup-gated-ctl deactivate`, beides wirkt. Dann im verbotenen Netz aktivieren: Der Client darf **nicht** starten.
-6. **Fail-safe.** Die Konfiguration absichtlich beschädigen und den Dienst neu starten. Erwartet: Fehlerfenster mit der konkreten Ursache, Client gestoppt, und der Dienst startet sich **nicht** in einer Schleife neu — `systemctl --user status urbackup-gated` zeigt den Fehlschlag.
-7. **Selbstheilung.** `sudo systemctl enable urbackupclientbackend`, dann `urbackup-gated` neu starten. Erwartet: Der Dienst ist danach wieder deaktiviert, mit einer entsprechenden Zeile im Journal.
-8. **Abmelden.** Erwartet: Der Client wird beim Beenden der Sitzung gestoppt.
-9. **Erstes echtes Backup.** Die Fortschrittsanzeige gegen die Wirklichkeit prüfen. Das ist die **einzige inhaltlich offene Annahme** der Implementierung: Die genaue JSON-Struktur von `urbackupclientctl status` konnte nicht verifiziert werden, weil das Client-Backend beim Programmieren nicht lief. Der Parser deckt beide plausiblen Formen ab (`running_processes`-Liste oder Felder direkt auf oberster Ebene) und fällt sonst geordnet auf „nicht erreichbar" zurück — aber ob die Zahlen stimmen, zeigt erst der erste Lauf.
+6. **Fail-safe, nur die Anzeige.** Die Konfiguration absichtlich beschädigen und den Dienst neu starten. Erwartet: ein **Fehlerfenster** mit der konkreten Ursache. Dass der Client dabei gestoppt wird, dass der Dienst mit dem vereinbarten Rückgabewert endet und dass er sich nicht in einer Schleife neu startet, prüft Stufe 2 — hier bleibt nur, was ein Auge braucht.
+7. **Abmelden.** Erwartet: Der Client wird beim Beenden der Sitzung gestoppt.
+8. **Erstes echtes Backup.** Die Fortschrittsanzeige gegen die Wirklichkeit prüfen. Das ist die **einzige inhaltlich offene Annahme** der Implementierung: Die genaue JSON-Struktur von `urbackupclientctl status` konnte nicht verifiziert werden, weil das Client-Backend beim Programmieren nicht lief. Der Parser deckt beide plausiblen Formen ab (`running_processes`-Liste oder Felder direkt auf oberster Ebene) und fällt sonst geordnet auf „nicht erreichbar" zurück — aber ob die Zahlen stimmen, zeigt erst der erste Lauf.
 
 # 2 Vorgaben
 

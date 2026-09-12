@@ -37,10 +37,25 @@ def ensure_watchdog() -> None:
         import watchdog.events  # noqa: F401
         import watchdog.observers  # noqa: F401
     except ImportError:
+        class _Observer:
+            """Enough of watchdog's Observer for run() to get through it."""
+
+            def schedule(self, *args, **kwargs):
+                pass
+
+            def start(self):
+                pass
+
+            def stop(self):
+                pass
+
+            def join(self, timeout=None):
+                pass
+
         events = types.ModuleType("watchdog.events")
         events.FileSystemEventHandler = object
         observers = types.ModuleType("watchdog.observers")
-        observers.Observer = object
+        observers.Observer = _Observer
         sys.modules.setdefault("watchdog", types.ModuleType("watchdog"))
         sys.modules["watchdog.events"] = events
         sys.modules["watchdog.observers"] = observers

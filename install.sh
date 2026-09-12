@@ -135,11 +135,16 @@ rm -rf "$LIB_DIR/urbackup_gated/__pycache__"
 
 write_wrapper() {
     local path=$1 module=$2
+    # -u is not a detail: without it Python buffers stdout in blocks as soon as
+    # it is not a terminal, which under systemd it never is. The journal would
+    # then stay empty until the buffer fills or the service ends - for a daemon
+    # that runs for days and whose only diagnostic channel is the journal, that
+    # is an outage of the logging.
     cat >"$path" <<EOF
 #!/bin/sh
 PYTHONPATH=$LIB_DIR
 export PYTHONPATH
-exec /usr/bin/python3 -m $module "\$@"
+exec /usr/bin/python3 -u -m $module "\$@"
 EOF
     chmod 0755 "$path"
 }
