@@ -1,6 +1,10 @@
 [Unit]
 Description=Gate the UrBackup client by the current network connection
 After=graphical-session.target
+# Bound to the graphical session, not merely ordered after it: PartOf ends the
+# service when that session ends. Ordering alone would leave it running for as
+# long as the user manager lives.
+PartOf=graphical-session.target
 
 [Service]
 Type=simple
@@ -12,4 +16,9 @@ RestartSec=30
 RestartPreventExitStatus=78
 
 [Install]
-WantedBy=default.target
+# Not default.target: that is reached by any login, an SSH one included, and
+# usually before the desktop has handed DISPLAY and friends to the user manager.
+# The service belongs to the graphical session in both directions - only there
+# can the user pick a network at all, and before the login the system might well
+# bring up a metered one on its own with nobody around to intervene.
+WantedBy=graphical-session.target

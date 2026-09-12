@@ -24,11 +24,15 @@ mit einem `d` am Ende benannt wird. Systemd-Unit entsprechend
 
 ## Systemintegration und Rechteaufteilung
 
-`urbackup-gated` läuft als `systemd --user`-Dienst, nicht als System-Dienst —
-startet also erst mit der Anmeldung und endet mit der Abmeldung. Das entspricht
-der gewollten Regel „Sicherung läuft nur, wenn angemeldet". Desktop-Notifications
-laufen dadurch ganz natürlich in der eigenen Sitzung, ohne Umweg über eine fremde
-D-Bus-Session.
+`urbackup-gated` läuft als `systemd --user`-Dienst, nicht als System-Dienst.
+Desktop-Notifications laufen dadurch ganz natürlich in der eigenen Sitzung, ohne
+Umweg über eine fremde D-Bus-Session.
+
+**Genauer: Er gehört zur grafischen Sitzung, nicht zur Anmeldung überhaupt.** Die Unit hängt in beide Richtungen an `graphical-session.target` — sie startet mit ihr und endet mit ihr. Das ist nicht dasselbe wie `default.target`: Dieses Ziel wird bei **jeder** Anmeldung erreicht, auch bei einer reinen SSH-Sitzung, und in der Regel bevor der Desktop `DISPLAY`, `WAYLAND_DISPLAY` und `XAUTHORITY` an den User-Manager übergeben hat. Ein Dienst, der dort startet, könnte für die ganze Sitzung ohne Anzeige laufen: Statusfenster und Fehlerdialog blieben stumm.
+
+**Der tragende Grund ist aber nicht die Anzeige, sondern die Bedienbarkeit:** Nur in einer grafischen Sitzung kann der Nutzer das Netz überhaupt auswählen. Vor der Anmeldung könnte das System selbstständig einen limitierten Zugang aufbauen — und niemand wäre da, um einzugreifen. Die Regel „Sicherung läuft nur, wenn angemeldet" wird damit zu „nur, wenn jemand am Rechner sitzt und handeln kann".
+
+**Benannte Folge:** Auf einem Rechner, an dem sich jemand ausschließlich per SSH anmeldet, läuft der Dienst nicht — dort wird weder gegatet noch gemeldet.
 
 `urbackupclientbackend.service` bleibt ein System-Dienst mit Root-Rechten
 (unverändert). Damit `urbackup-gated` ihn dennoch steuern kann, ohne selbst Root

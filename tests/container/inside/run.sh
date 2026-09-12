@@ -152,6 +152,17 @@ else
     no "user unit has no syntax errors"
 fi
 
+# default.target is reached by any login, an SSH one included. The service is
+# meant to live and die with the graphical session, in both directions.
+grep -qx "WantedBy=graphical-session.target" "$USER_UNIT" \
+    && ok "the unit starts with the graphical session" \
+    || no "the unit starts with the graphical session"
+grep -qx "PartOf=graphical-session.target" "$USER_UNIT" \
+    && ok "the unit ends with the graphical session" \
+    || no "the unit ends with the graphical session"
+check_not "the unit is not wanted by default.target" \
+    grep -q "WantedBy=default.target" "$USER_UNIT"
+
 section "privileges are narrow"
 systemctl stop "$CLIENT_UNIT" >/dev/null 2>&1
 check "granted: start the client unit" \
