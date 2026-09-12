@@ -20,13 +20,13 @@ You can also switch it off by hand for a while, straight from a notification, an
 
 ## What it looks like
 
-![A notification when a backup starts](images/notification-backup-started.png)
+![A notification while a backup runs](images/notification-backup-progress.png)
 
-*A backup has started. `Details` opens the status window, `Deactivate` stops backing up until you say otherwise.*
+*A full backup in progress. `Details` opens the status window, `Deactivate` stops backing up until you say otherwise.*
 
-![The status window while a backup runs](images/status-backup-running.png)
+![The status window while a backup runs](images/status-backup-progress.png)
 
-*The status window: which network you are on, whether it is allowed, and what the client is doing.*
+*The status window: which network you are on, whether it is allowed, and how far the backup has got.*
 
 ![The status window on a network that is not allowed](images/status-blocked.png)
 
