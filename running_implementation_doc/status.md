@@ -43,3 +43,4 @@ Abgearbeitete Fahrplaneinträge, chronologisch. Begründungen stehen nicht hier,
 
 - Schritt 1 — Die Hauptschleife weckt sich nicht mehr selbst: Der Verzeichnisbeobachter unterscheidet jetzt zusätzlich zum Dateinamen die Art des Ereignisses, weil inotify auch das bloße Lesen meldet und der Dienst die Kommandodatei in jedem Durchlauf liest.
 - Schritt 2 — Die Ruhemessung der Container-Stufe wird nach dem Anlegen der Kommandodatei wiederholt. Die bestehende Messung lief, bevor die Datei existierte, und konnte den Fehler deshalb nicht sehen.
+- Schritt 3 — Über einen Client, den der Dienst selbst gestoppt hat, zeigt die Statusanzeige keine Erreichbarkeitsdiagnose mehr, sondern ein `-`. Bei laufender oder unbekannter Unit bleibt die Diagnose stehen.
