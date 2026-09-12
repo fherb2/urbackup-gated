@@ -20,7 +20,7 @@ anzeige per `notify`, die es für UrBackup unter Linux von Haus aus nicht gibt. 
 Festgelegt: **`urbackup-gated`** — kürzer als der ursprüngliche Arbeitstitel
 `urbackup-watcherd`, folgt aber weiterhin der üblichen Konvention, dass ein Dämon
 mit einem `d` am Ende benannt wird. Systemd-Unit entsprechend
-`urbackup-gated.service`, Konfigurationsordner `/etc/urbackup-gated`.
+`urbackup-gated.service`, Konfigurationsdatei `/etc/urbackup-gated.conf`.
 
 ## Systemintegration und Rechteaufteilung
 
@@ -60,6 +60,8 @@ einmal schmerzhaft auffallen:
 Root-Rechten hochkommt. Einzige Instanz, die es je startet oder stoppt, ist
 `urbackup-gated`.
 
+**Die Rücknahme gehört zur Festlegung:** `uninstall.sh` nimmt den Client-Dienst wieder in den Systemstart auf (`systemctl enable --now`). Sonst bliebe nach dem Entfernen von `urbackup-gated` ein deaktivierter Client zurück, den niemand mehr startet — das Ergebnis wäre „gar keine Sicherungen mehr", und zwar unbemerkt, weil auch die Meldungen mit dem Dienst verschwinden. Die Deaktivierung ist also kein Zustand, den wir herstellen, sondern einer, den wir für die Dauer unserer Zuständigkeit halten. Gelingt das Wiederaktivieren nicht, sagt `uninstall.sh` das ausdrücklich, statt es zu verschweigen. Die Konfigurationsdatei bleibt dabei absichtlich stehen; sie zu löschen ist Sache des Nutzers.
+
 **Selbstheilung nach Neuinstallation:** Das offizielle UrBackup-Installationsskript
 (`install_client_linux.sh`) ruft bedingungslos bei jedem Lauf
 `systemctl enable urbackupclientbackend.service` gefolgt von `systemctl start`
@@ -79,6 +81,7 @@ Bewertet werden **alle gleichzeitig aktiven physischen Verbindungen**, nicht nur
 - Irgendeine aktive WLAN-Verbindung, deren SSID **nicht** auf der Erlaubnisliste steht → verboten. Läuft der UrBackup-Client, wird er gestoppt; läuft er nicht, wird er nicht gestartet. Das gilt auch dann, wenn parallel eine Ethernet-Verbindung besteht.
 - Sonst, sofern mindestens eine aktive Verbindung vorhanden ist (Ethernet, oder WLAN mit erlaubter SSID) → erlaubt. Läuft der Client nicht, wird er gestartet; läuft er, läuft er weiter.
 - Gar keine aktive Netzwerkverbindung → **keine** Entscheidung, der Client bleibt in seinem aktuellen Zustand: gestoppt oder laufend.
+- **Die Netzlage lässt sich nicht ermitteln** — `nmcli` fehlt, antwortet nicht oder schlägt fehl → **verboten**, behandelt wie ein nicht erlaubtes Netz. Der Unterschied zum Fall darüber ist wesentlich: „Keine Verbindung" ist eine Feststellung, „unbekannt" ist keine. Über eine Verbindung, die wir nicht beurteilen können, wird nicht gesichert — dieselbe konservative Richtung wie bei kaputter Konfiguration, und aus demselben Grund: Eine verpasste Sicherungsgelegenheit ist unkritisch, eine ungeprüfte Sicherung über ein womöglich volumenbeschränktes Netz ist genau das Risiko, das dieser Dienst ausschließen soll. Der Grund erscheint als solcher im Status und in der Meldung, damit der Nutzer den Fall von einem echten Netzverbot unterscheiden kann.
 
 Die so ermittelte Erlaubnis ist nur die eine Hälfte; sie wird mit dem manuellen Nutzer-Zustand verundet (siehe „Manuelles Aktivieren und Deaktivieren").
 
@@ -220,10 +223,14 @@ Geschrieben wird die Datei atomar wie die Kommandodatei (siehe „Manuelles Akti
 - Bei Zustandswechsel "Sicherung läuft nicht" ↔ "Sicherung läuft" (im laufenden Betrieb erkannt bei den
   Zeittriggern).
 - Wenn keine Sicherung läuft: alle 2 Stunden (bei einem der Zeittrigger; Zeit konfigurierbar) eine kurze
-  Meldung, ob eine Verbindung zum UrBackup-Server besteht. Wird nicht gesichert, nennt diese Meldung
-  ausdrücklich den **Grund** — „manuell deaktiviert" gegenüber „Netz nicht erlaubt" gegenüber „keine
-  Netzwerkverbindung". Ohne diese Unterscheidung wäre für den Nutzer nicht erkennbar, ob er selbst
-  abgeschaltet hat und es nur vergessen hat, oder ob die Netzlage den Betrieb verhindert.
+  Meldung. Deren Inhalt hängt davon ab, **warum** nicht gesichert wird:
+  - Ist die Sicherung erlaubt und der Client läuft, steht dort, **ob eine Verbindung zum UrBackup-Server
+    besteht** — die einzige Frage, die dann noch offen ist.
+  - Ist sie nicht erlaubt, steht dort stattdessen ausdrücklich der **Grund** — „manuell deaktiviert"
+    gegenüber „Netz nicht erlaubt" gegenüber „keine Netzwerkverbindung" gegenüber „Netzlage unbekannt".
+    Die Serververbindung wird in diesem Fall **nicht** genannt: Der Client ist gestoppt, es gibt keine.
+    Ohne die Unterscheidung der Gründe wäre für den Nutzer nicht erkennbar, ob er selbst abgeschaltet
+    und es nur vergessen hat, oder ob die Netzlage den Betrieb verhindert.
 - Wenn eine Sicherung läuft: alle 15 Minuten (konfigurierbar) ein kurzer Fortschrittsstatus.
 - Anzeigedauer 5 Sekunden, konfigurierbar.
 
@@ -333,8 +340,9 @@ Der `--listen`-Teil ist ohnehin keine systemd-Frage: Der Dienst bekommt von syst
 
 ## Konfiguration
 
-Eigene Datei/Ordner: `/etc/urbackup-gated` (wenn es bei einer Datei bleibt, reicht die Konfigurationsdatei `/etc/urbackup-gated.conf`, andernfalls kommen die Files in einen Ordner `/etc/urbackup-gated`). Muss mindestens enthalten: Liste
-erlaubter SSIDs, konfigurierbare Zeiten / Intervalle, soweit sie einstellbar sein sollen statt fest im Code.
+**Festgelegt: genau eine Datei, `/etc/urbackup-gated.conf`.** Die zeitweise offene Alternative eines Ordners `/etc/urbackup-gated` mit mehreren Dateien ist damit entschieden und entfällt — der Umfang der Einstellungen rechtfertigt sie nicht. Die Datei muss mindestens enthalten: die Liste erlaubter SSIDs sowie die Zeiten und Intervalle, soweit sie einstellbar sein sollen statt fest im Code.
+
+**Änderungen wirken erst nach einem Neustart des Dienstes.** Die Konfiguration wird ein einziges Mal beim Start gelesen, nicht bei jeder Bewertung; es gibt bewusst keine Überwachung der Datei. Wer die Erlaubnisliste oder ein Intervall ändert, muss anschließend `systemctl --user restart urbackup-gated` aufrufen. Das gilt in beide Richtungen: Auch eine im laufenden Betrieb beschädigte Datei löst den Fail-safe (s. u.) **nicht** sofort aus, sondern erst beim nächsten Start.
 
 Aktuell genannte SSIDs: `lieluX`, `lielux`, `lieluxVPN`, `HZDR` — geklärt: kein
 Tippfehler, `lieluX` und `lielux` sind zwei tatsächlich unterschiedliche, echte
@@ -350,12 +358,14 @@ Netze. Vergleich bleibt case-sensitiv. Diese SSIDs werden schon im Repo als Beis
 
 ### Fail-safe bei fehlender/kaputter Konfiguration
 
-Fehlt `/etc/urbackup-gated` als Ordner bzw. Konfigurationsdatei, ist sie nicht lesbar oder inhaltlich fehlerhaft
+Fehlt `/etc/urbackup-gated.conf`, ist sie nicht lesbar oder inhaltlich fehlerhaft
 (z. B. keine gültige SSID-Liste), bleibt `urbackupclientbackend` **gestoppt**
 bzw. wird gestoppt — unabhängig davon, welches Netz gerade aktiv ist. Sicherer
 Default: eine verpasste Sicherungsgelegenheit ist unkritisch, eine ungeprüft
 laufende Sicherung über ein möglicherweise nicht erlaubtes Netz wäre genau
 das Risiko, das der Dienst verhindern soll.
+
+**Geprüft wird beim Dienststart**, nicht laufend (s. o., „Änderungen wirken erst nach einem Neustart des Dienstes"). Der Dienst stoppt den Client, zeigt das Fehlerfenster und **beendet sich**; er bleibt nicht in einem halb arbeitsfähigen Zustand. Damit daraus keine Endlosschleife aus Neustart und Fehlerfenster wird, unterscheidet er diesen Abbruch für systemd erkennbar von einem gewöhnlichen Fehlschlag: Auf diesen einen Abbruchgrund wird nicht neu gestartet, auf andere schon.
 
 Keine eigene Notify-Meldung für diesen Fall — der Nutzer erkennt den
 Fehlzustand indirekt am Ausbleiben der gewohnten Verbindungs-/
@@ -389,6 +399,8 @@ beobachtet sie per inotify (z. B. Python-`watchdog`) und löst darauf sofort
 eine Prüfung aus. Dazu weiterhin der 30-Sekunden-Timer im Dienst selbst als
 Fallback, falls ein Event verpasst wird.
 
+**Die Datei heißt `/run/urbackup-gated/network-event`.** Der Name steht hier, weil er die einzige Verabredung zwischen zwei getrennt entwickelten Teilen ist: Der Dispatcher schreibt ihn als root, der Dienst filtert seine Verzeichnisüberwachung darauf. Wer eine der beiden Seiten ändert, ohne die andere zu kennen, bekommt keinen Fehler, sondern ein stilles Ausbleiben der Ereignisse — gedeckt nur noch vom Zeittakt, also mit bis zu 30 Sekunden Verzögerung statt sofort. **Ihr Inhalt spielt keine Rolle**; sie wird nur berührt, nicht beschrieben. Das unterscheidet sie von der Kommandodatei, die einen Zustand trägt (siehe „Manuelles Aktivieren und Deaktivieren").
+
 **Zwei Eigenschaften der Überwachung, die nicht Feinheit, sondern Voraussetzung sind:**
 
 - Überwacht wird **das Verzeichnis, nicht die einzelne Datei.** Maßgeblich dafür ist die Kommandodatei: Sie wird atomar per `rename` ersetzt (s. „Manuelles Aktivieren und Deaktivieren"), und eine Überwachung, die an der Datei selbst hängt, verliert dabei stillschweigend ihr Ziel — sie beobachtet danach ein Objekt, das niemand mehr beschreibt, ohne dass ein Fehler auffällt. Für die Netzwerkdatei gilt das nicht: Der Dispatcher berührt sie nur, ihr Inode bleibt erhalten, und eine Dateiüberwachung täte es für sie allein. Die Verzeichnisüberwachung ist trotzdem der richtige Weg — für die Kommandodatei ist sie ohnehin zwingend, und sie deckt beide Dateien mit einem einzigen Beobachter ab.
@@ -410,7 +422,7 @@ Festgelegt: **`nmcli`** per Subprozess, mit `-t` (terse, maschinenlesbares
 Format) und `-f` (gezielte Felder, z. B. `TYPE,STATE,CONNECTION`) — passend
 zum bisherigen Muster bei Notify.
 
-Abgefragt wird nicht die primäre Verbindung, sondern **die vollständige Liste aller aktiven Verbindungen**, je Eintrag mit Typ (Ethernet/WLAN/sonstiges) und, bei WLAN, der SSID. Das folgt zwingend aus den Entscheidungsregeln: Eine einzige aktive, nicht erlaubte WLAN-Verbindung verbietet den Betrieb, auch wenn sie nicht die primäre Verbindung ist. Eine Abfrage, die nur die primäre Verbindung liefert, wäre für diese Regel unbrauchbar.
+Abgefragt wird nicht die primäre Verbindung, sondern **die vollständige Liste aller aktiven Verbindungen**, je Eintrag mit Typ und, bei WLAN, der SSID. Aus dieser Liste geht dann **nur weiter, was Ethernet oder WLAN ist**; Loopback und alles Übrige — Brücken, Tunnel, virtuelle Geräte — fällt heraus und erscheint auch im Status nicht. Das ist die Umsetzung von „alle gleichzeitig aktiven **physischen** Verbindungen" aus den Entscheidungsregeln: Abgefragt wird vollständig, bewertet wird die physische Teilmenge. Das folgt zwingend aus den Entscheidungsregeln: Eine einzige aktive, nicht erlaubte WLAN-Verbindung verbietet den Betrieb, auch wenn sie nicht die primäre Verbindung ist. Eine Abfrage, die nur die primäre Verbindung liefert, wäre für diese Regel unbrauchbar.
 
 Sprachabhängigkeit der Ausgabe ist damit vollständig beseitigt, nicht nur
 verringert: Laut `nmcli`-Handbuch, Abschnitt „INTERNATIONALIZATION NOTES",
