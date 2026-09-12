@@ -231,7 +231,12 @@ if [ -d "/run/user/$SERVICE_UID" ]; then
             "$@"
     }
     run_as_user systemctl --user daemon-reload
-    run_as_user systemctl --user enable --now urbackup-gated.service
+    run_as_user systemctl --user enable urbackup-gated.service
+    # restart, not "enable --now": that starts only what is not already running,
+    # so an installation over an existing one left the old code running until
+    # the next logout while the new one sat on disk. restart also starts a unit
+    # that is not running, which makes a case distinction unnecessary.
+    run_as_user systemctl --user restart urbackup-gated.service
     echo
     echo "urbackup-gated is enabled and running."
     echo "Status:  urbackup-gated-ctl status"
@@ -239,7 +244,8 @@ if [ -d "/run/user/$SERVICE_UID" ]; then
 else
     echo
     echo "$SERVICE_USER has no active session, so the service was not started."
-    echo "Run this as $SERVICE_USER after the next login:"
+    echo "Run this as $SERVICE_USER from the graphical session:"
     echo "  systemctl --user daemon-reload"
-    echo "  systemctl --user enable --now urbackup-gated.service"
+    echo "  systemctl --user enable urbackup-gated.service"
+    echo "  systemctl --user restart urbackup-gated.service"
 fi
