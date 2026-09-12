@@ -43,8 +43,18 @@ def notify(summary: str, body: str, timeout_seconds: int, actions: dict[str, str
 
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=3600)
-    except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+    except (OSError, subprocess.TimeoutExpired) as error:
         print(f"notification failed: {error}", file=sys.stderr)
+        return None
+    # Without this, every real failure looks like "no action chosen": no display,
+    # no session bus, or a notify-send too old to know --action. The user sees
+    # nothing, and the journal would have said nothing either.
+    if result.returncode != 0:
+        print(
+            f"{NOTIFY_SEND} failed with code {result.returncode}: "
+            f"{result.stderr.strip()}",
+            file=sys.stderr,
+        )
         return None
     chosen = result.stdout.strip()
     return chosen or None
@@ -66,9 +76,20 @@ def error_dialog(message: str) -> None:
         "OK:0",
     ]
     try:
-        subprocess.run(command, timeout=3600)
-    except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+        # Output is captured only so a failure can be reported; yad draws its
+        # window regardless.
+        result = subprocess.run(command, capture_output=True, text=True, timeout=3600)
+    except (OSError, subprocess.TimeoutExpired) as error:
         print(f"error dialog failed: {error}", file=sys.stderr)
+        return
+    # A non-zero code here is not the user clicking something away - the only
+    # button is OK, which exits 0. It means yad never got to show anything, and
+    # that is precisely the moment the user is owed an explanation.
+    if result.returncode != 0:
+        print(
+            f"{YAD} failed with code {result.returncode}: {result.stderr.strip()}",
+            file=sys.stderr,
+        )
 
 
 class StatusWindow:
