@@ -15,11 +15,20 @@ class LoadDefaults(support.StubbedCase):
     def test_shipped_default_config_is_valid(self):
         shipped = support.REPO_ROOT / "packaging/config/urbackup-gated.conf"
         loaded = config.load(shipped)
-        self.assertIn("lieluX", loaded.allowed_ssids)
-        self.assertIn("lielux", loaded.allowed_ssids)
         self.assertEqual(loaded.check_seconds, 30)
         self.assertEqual(loaded.check_seconds_window_open, 5)
         self.assertEqual(loaded.notify_timeout_seconds, 5)
+
+    def test_the_shipped_allow_list_holds_placeholders_only(self):
+        # The repository is public and the README invites cloning. Whoever
+        # installs without opening the file would otherwise allow backups over
+        # four networks whose names mean nothing to them.
+        shipped = support.REPO_ROOT / "packaging/config/urbackup-gated.conf"
+        for ssid in config.load(shipped).allowed_ssids:
+            self.assertTrue(
+                ssid.startswith("Your"),
+                f"{ssid!r} looks like a real network, not a placeholder",
+            )
 
     def test_ssids_are_case_sensitive(self):
         loaded = config.load(self.write_config(ssids=["lieluX", "lielux"]))

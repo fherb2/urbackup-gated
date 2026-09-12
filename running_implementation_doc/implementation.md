@@ -412,9 +412,9 @@ Der `--listen`-Teil ist ohnehin keine systemd-Frage: Der Dienst bekommt von syst
 
 **Änderungen wirken erst nach einem Neustart des Dienstes.** Die Konfiguration wird ein einziges Mal beim Start gelesen, nicht bei jeder Bewertung; es gibt bewusst keine Überwachung der Datei. Wer die Erlaubnisliste oder ein Intervall ändert, muss anschließend `systemctl --user restart urbackup-gated` aufrufen. Das gilt in beide Richtungen: Auch eine im laufenden Betrieb beschädigte Datei löst den Fail-safe (s. u.) **nicht** sofort aus, sondern erst beim nächsten Start.
 
-Aktuell genannte SSIDs: `lieluX`, `lielux`, `lieluxVPN`, `HZDR` — geklärt: kein
-Tippfehler, `lieluX` und `lielux` sind zwei tatsächlich unterschiedliche, echte
-Netze. Vergleich bleibt case-sensitiv. Diese SSIDs werden schon im Repo als Beispiel so benutzt.
+**Die ausgelieferte Konfiguration enthält Platzhalter, keine echten SSIDs.** Das Repository ist öffentlich und das README lädt zum Klonen ein; wer ohne einen Blick in die Datei installiert, erlaubte sonst Sicherungen über vier Netze, deren Namen ihm nichts sagen. Ausgeliefert werden deshalb zwei Platzhalter — zwei, damit die Liste als Liste erkennbar bleibt. Eine **leere** Liste ist ebenfalls gültig und bedeutet: Ethernet ja, jedes WLAN nein.
+
+**Der Vergleich bleibt case-sensitiv.** Das ist keine Nachlässigkeit: Auf dem Rechner, für den dieses Werkzeug entstand, sind `lieluX` und `lielux` zwei tatsächlich unterschiedliche, echte Netze. Ein Vergleich ohne Rücksicht auf Groß- und Kleinschreibung würde hier zwei Netze zu einem verschmelzen — und eines davon könnte das falsche sein.
 
 ### Format: TOML
 
