@@ -282,6 +282,14 @@ fi
 
 # The daemon writes state.json into the directory it watches. If its own writes
 # woke it up, this would spin instead of resting until the 60 second tick.
+#
+# This covers one of the two feedback paths only. The other one needs the
+# command file to exist and is measured further down - do not take this check
+# as proof that the loop rests.
+#
+# Both measurements have to start right after the loop has just run, so that
+# the eight second window falls at the beginning of the sixty second gap and
+# not across the next tick. Here that is the client start above.
 before=$(stat -c %y "$RUNDIR/state.json")
 sleep 8
 after=$(stat -c %y "$RUNDIR/state.json")
@@ -308,6 +316,21 @@ check_not "the control tool refuses to set the flag as root" \
 [ "$(stat -c %U "$RUNDIR/user-enabled")" = "$SERVICE_USER" ] \
     && ok "the command file still belongs to the service user" \
     || no "the command file still belongs to the service user"
+
+# The same measurement as above, but now the command file exists - and the
+# daemon reads it on every single pass. inotify reports that read as an event
+# on a watched name, so this is where the loop used to start spinning. The
+# earlier measurement cannot see it: up to there the daemon has deleted the
+# file at startup and nobody has created it yet.
+#
+# The window starts right after the deactivation above woke the loop; the
+# refused root call in between writes nothing.
+before=$(stat -c %y "$RUNDIR/state.json")
+sleep 8
+after=$(stat -c %y "$RUNDIR/state.json")
+[ "$before" = "$after" ] \
+    && ok "reading the command file does not wake the loop" \
+    || no "reading the command file does not wake the loop"
 
 check "status tool succeeds" as_user urbackup-gated-ctl status
 as_user urbackup-gated-ctl status >"$TESTDIR/status.txt" 2>&1
