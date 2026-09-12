@@ -2,43 +2,19 @@
 
 ## Stand
 
-`dev` trägt den vollständigen Stand (`ab6f5bd`), gepusht. Das Werkzeug ist am 12. September 2026 erstmals auf dem Zielrechner installiert worden; die Abnahme von Hand läuft. Dabei sind drei Befunde entstanden, die **vor** dem Abschluss der Abnahme zu beheben sind.
+`dev` trägt den vollständigen Stand. Das Werkzeug ist am 12. September 2026 erstmals auf dem Zielrechner installiert worden; die Abnahme von Hand läuft. Von den drei Befunden der ersten Installation sind zwei behoben (`b84dd3b`, `edb8623`), einer steht noch aus.
 
-Die Werkbank `claude-workbench` steht einen Commit hinter `dev` und ist bei Gelegenheit nachzuziehen (`git merge --ff-only dev`).
+**Auf dem Zielrechner läuft weiterhin der alte Stand.** Die Korrektur der Hauptschleife wirkt dort erst nach einer Neuinstallation von `dev` — bis dahin löst der Handschalter das Durchdrehen erneut aus, und `systemctl --user restart urbackup-gated` beendet es wieder.
+
+Die Werkbank `claude-workbench` steht hinter `dev` und ist bei Gelegenheit nachzuziehen (`git merge --ff-only dev`).
 
 ## Phase 1 — Befunde aus der ersten Installation
-
-### Schritt 1 — Die Hauptschleife dreht durch (schwerwiegend)
-
-**Gemessen am laufenden Dienst:** 49 Schreibvorgänge von `state.json` in 2 Sekunden statt einem alle 30 Sekunden, 470 Sekunden Rechenzeit in 14 Minuten Laufzeit — gut ein halber Kern, dauerhaft. Rund 34.000 Unterprozesse in zwei Minuten (`nmcli`, `urbackupclientctl`, `systemctl`). Das Flackern des Live-Statusfensters war nur das sichtbare Symptom; die Schleife dreht auch ohne offenes Fenster.
-
-**Ursache, isoliert nachgewiesen:** `watchdog` 3.0.0 meldet beim **bloßen Lesen** einer Datei ein `FileOpenedEvent`. Damit entsteht eine Rückkopplung:
-
-```
-Schleifendurchlauf
-  → state.gather() → runtime.read_user_enabled()   oeffnet user-enabled
-      → inotify FileOpenedEvent auf "user-enabled"
-          → _TriggerHandler: Name steht in WATCHED_NAMES → _wake.set()
-  → _wake.wait(30 s) kehrt sofort zurueck → naechster Durchlauf
-```
-
-**Bedingung:** Die Datei `/run/urbackup-gated/user-enabled` muss existieren. Beim Dienststart wird sie gelöscht, ein frisch gestarteter Dienst dreht also nicht durch — erst der erste Aufruf von `urbackup-gated-ctl activate` oder `deactivate` legt sie an. Am Zielrechner exakt nachvollzogen: Der Prozess-ID-Sprung im Journal beginnt unmittelbar nach dem Anlegen der Datei.
-
-**Zu ändern:** `_TriggerHandler.on_any_event` darf nur auf Ereignisse reagieren, die eine Datei **verändern**. `FileOpenedEvent` und `FileClosedNoWriteEvent` gehören nicht dazu. Die Prüfung auf den Dateinamen bleibt.
-
-**Sofortmaßnahme für den Betrieb, bis das behoben ist:** `systemctl --user restart urbackup-gated` beendet das Drehen, weil der Start die Datei löscht. Bei der Abnahme heißt das: Punkt 5 (Handschalter) löst das Verhalten erneut aus.
-
-### Schritt 2 — Die Prüfung dafür existierte und stand an der falschen Stelle
-
-Der Container-Prüfpunkt „own status writes do not wake the loop" misst acht Sekunden Ruhe — **bevor** der Handschalter-Test die Kommandodatei anlegt. Die Bedingung des Fehlers galt dort noch nicht, deshalb war er grün.
-
-**Zu ändern:** Die Ruhemessung wiederholen, **nachdem** `user-enabled` existiert. Ohne das bleibt der Fehler nach der Korrektur genauso unbemerkt wie vorher. Dieselbe Art Fehler ist in dieser Sitzung dreimal aufgetreten (falsch-grüne Prüfpunkte, `yad`-Attrappe, hier) — die Prüfung stand jeweils dort, wo die Bedingung nicht galt.
 
 ### Schritt 3 — Statustext bei bewusst gestopptem Client
 
 Zeigt der Status `service active: no`, steht darunter heute `status: not reachable (backend not running?)`. Das ist aus Sicht von UrBackup richtig, aber irreführend: Wir haben den Client selbst gestoppt. Eine Diagnose über seine Erreichbarkeit ist dann keine Information.
 
-**Zu ändern:** Ist die Unit nicht aktiv, gehört dort ein `–` hin statt der Vermutung. Betrifft `state.format_status`.
+**Zu ändern:** Ist die Unit nicht aktiv, gehört dort ein `-` hin statt der Vermutung. Betrifft `state.format_status`.
 
 ### Offen, vor Schritt 3 zu klären
 
@@ -48,6 +24,14 @@ Zu klären ist, welcher Fall vorlag:
 
 - Der Client wurde **von Hand** gestartet oder gestoppt (`sudo systemctl` um 20:19 und 20:21) und der Wechsel „Sicherung läuft/läuft nicht" wurde nicht gemeldet → **echter Ausfall**, dann wird das ein eigener Schritt.
 - Es wurde auf eine Meldung gewartet, während sich nichts änderte → kein Fehler.
+
+### Beobachtet, nicht aufgeklärt
+
+Der Container-Prüfpunkt „without any connection the running client is left alone" war bei der Abnahme einmal rot und danach grün, ohne erklärte Ursache. Beim Gegenbeweis zu Schritt 2 ist er zusammen mit der drehenden Schleife rot geworden und ohne sie grün — je eine Beobachtung pro Richtung, kein Beweis.
+
+Der Zwischenmechanismus ist **nicht** bekannt. Die naheliegende Vermutung trägt nicht: Das Wettrennen zwischen dem Setzen der Szenariodatei und der `nmcli`-Attrappe, die sie liest, endet in einem fehlschlagenden `nmcli`, und das führt zu `effective = None` und damit zu *keiner* Handlung — es kann den Client also nicht stoppen. Was ihn in diesem Moment stoppt, ist offen.
+
+Solange der Prüfpunkt grün bleibt, ist das keine Aufgabe. Wird er wieder rot, beginnt hier die Spur.
 
 ## Phase 2 — Abnahme von Hand abschließen
 
@@ -59,7 +43,9 @@ Stufe 3, beschrieben in der Implementierungsdoku unter „Stufe 3: Abnahme von H
 - Der Installer stoppt und deaktiviert `urbackupclientbackend` wie vorgesehen.
 - **Punkt 3 (echter Netzwechsel):** Wechsel von `lieluxVPN` auf `lieluX` hat den Client gestartet, Meldung kam, Serververbindung wurde gemeldet.
 
-**Noch offen:** Punkt 1 (Schaltflächen und Anzeigedauer), Punkt 2 (Live-Fenster — erst nach Schritt 1 sinnvoll, es flackerte), Punkt 4 (Dockingstation), Punkt 5 (Handschalter — löst bis zur Korrektur das Drehen aus), Punkt 6 (Fehlerfenster des Fail-safe), Punkt 7 (Abmelden), Punkt 8 (erstes echtes Backup).
+**Noch offen:** Punkt 1 (Schaltflächen und Anzeigedauer), Punkt 2 (Live-Fenster), Punkt 4 (Dockingstation), Punkt 5 (Handschalter), Punkt 6 (Fehlerfenster des Fail-safe), Punkt 7 (Abmelden), Punkt 8 (erstes echtes Backup).
+
+Punkt 2 und Punkt 5 setzen die Neuinstallation von `dev` voraus — mit dem alten Stand flackert das Fenster und der Handschalter startet das Durchdrehen.
 
 Punkt 8 bleibt die **einzige inhaltlich offene Annahme** des Vorhabens: Ob die Fortschrittszahlen aus `urbackupclientctl status` stimmen, zeigt erst die erste echte Sicherung.
 

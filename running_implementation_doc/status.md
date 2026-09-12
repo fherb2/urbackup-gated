@@ -38,3 +38,8 @@ Abgearbeitete Fahrplaneinträge, chronologisch. Begründungen stehen nicht hier,
 - Schritt 3 — Installation, Unit und Werkzeuge: Unit an der grafischen Sitzung, ehrliche Abbruchmeldung bei abgelehnter sudoers-Datei, Neustart bei Aktualisierung, `python3-watchdog` wird angeboten, Kommandowerkzeug verweigert den Schreibweg als root, doppelte Verzeichnisprüfung entfernt.
 - Schritt 4 — Dateirechte und Doku-Nachführung: Status- und Kommandodatei wieder lesbar, Aktionsliste des Dispatchers dokumentiert, Selbstwiderspruch zu `install.sh` aufgelöst, ausgelieferte Konfiguration mit Platzhaltern, Anhang abgeschlossen.
 - Schritt 5 — Statusfenster: `\f`-Protokoll, Erkennen der geschlossenen Pipe und die Fensterlogik im Dienst geprüft. Damit ist kein Modul mehr ungeprüft.
+
+## Befunde der ersten Installation auf dem Zielrechner
+
+- Schritt 1 — Die Hauptschleife weckt sich nicht mehr selbst: Der Verzeichnisbeobachter unterscheidet jetzt zusätzlich zum Dateinamen die Art des Ereignisses, weil inotify auch das bloße Lesen meldet und der Dienst die Kommandodatei in jedem Durchlauf liest.
+- Schritt 2 — Die Ruhemessung der Container-Stufe wird nach dem Anlegen der Kommandodatei wiederholt. Die bestehende Messung lief, bevor die Datei existierte, und konnte den Fehler deshalb nicht sehen.
