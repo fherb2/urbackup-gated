@@ -11,6 +11,7 @@ TESTDIR=/run/urbackup-gated-test
 RUNDIR=/run/urbackup-gated
 CLIENT_UNIT=urbackupclientbackend.service
 USER_UNIT=/etc/systemd/user/urbackup-gated.service
+DISPATCHER=/etc/NetworkManager/dispatcher.d/90-urbackup-gated
 SERVICE_USER=tester
 
 passed=0
@@ -117,7 +118,12 @@ check "tmpfiles snippet installed" test -f /etc/tmpfiles.d/urbackup-gated.conf
 check_not "client service was taken out of the system start" \
     systemctl is-enabled --quiet "$CLIENT_UNIT"
 
-if ! systemd-analyze verify "$USER_UNIT" 2>&1 | grep -qiE 'unknown lvalue|failed to parse'; then
+# The existence guard is not pedantry: a missing file produces no output that
+# the grep would match, so without it the check goes green on nothing at all.
+# The exit code of systemd-analyze is unusable here, it is non-zero for harmless
+# warnings too - hence the grep.
+if [ -f "$USER_UNIT" ] \
+    && ! systemd-analyze verify "$USER_UNIT" 2>&1 | grep -qiE 'unknown lvalue|failed to parse'; then
     ok "user unit has no syntax errors"
 else
     no "user unit has no syntax errors"
@@ -140,14 +146,19 @@ check_not "refused: systemctl without the unit argument" \
     as_user sudo -n /usr/bin/systemctl start
 
 section "dispatcher event filter"
+# Without this the whole section is worthless: a missing hook cannot write a
+# trigger either, so "no trigger appeared" would read as a pass.
+check "dispatcher hook is in place" test -x "$DISPATCHER"
 rm -f "$RUNDIR/network-event"
-/etc/NetworkManager/dispatcher.d/90-urbackup-gated eth0 up
+"$DISPATCHER" eth0 up
 check "an interface coming up writes the trigger" test -f "$RUNDIR/network-event"
 rm -f "$RUNDIR/network-event"
-/etc/NetworkManager/dispatcher.d/90-urbackup-gated eth0 dhcp4-change
+"$DISPATCHER" eth0 dhcp4-change
 check "a dhcp change writes the trigger" test -f "$RUNDIR/network-event"
 rm -f "$RUNDIR/network-event"
-/etc/NetworkManager/dispatcher.d/90-urbackup-gated wg0 vpn-up
+# "Ignored" means it ran through in good order and did nothing - not that it
+# crashed before it could do anything, which would leave no trigger either.
+check "a vpn coming up leaves the hook succeeding" "$DISPATCHER" wg0 vpn-up
 check_not "a vpn coming up is ignored" test -f "$RUNDIR/network-event"
 
 section "the daemon in operation"
@@ -238,12 +249,19 @@ section "shutdown and removal"
 pkill -u "$SERVICE_USER" -f urbackup_gated.daemon
 check "the client is stopped when the daemon exits" wait_until 15 client_inactive
 
+# Absence after the uninstall only says something if the files were there
+# beforehand. Asserted here rather than relying on the installation section:
+# the entire operating section lies in between.
+check "everything to be removed is there beforehand" \
+    test -e "$DISPATCHER" -a -e "$USER_UNIT" -a -e /etc/sudoers.d/urbackup-gated \
+        -a -e /etc/tmpfiles.d/urbackup-gated.conf -a -e /usr/local/lib/urbackup-gated
+
 check "uninstall.sh succeeds" "$SOURCE/uninstall.sh" "$SERVICE_USER"
 check_not "wrapper removed" test -e /usr/local/bin/urbackup-gated
 check_not "control tool removed" test -e /usr/local/bin/urbackup-gated-ctl
 check_not "package removed" test -e /usr/local/lib/urbackup-gated
 check_not "sudoers drop-in removed" test -e /etc/sudoers.d/urbackup-gated
-check_not "dispatcher removed" test -e /etc/NetworkManager/dispatcher.d/90-urbackup-gated
+check_not "dispatcher removed" test -e "$DISPATCHER"
 check_not "tmpfiles snippet removed" test -e /etc/tmpfiles.d/urbackup-gated.conf
 check_not "user unit removed" test -e "$USER_UNIT"
 check_not "runtime directory removed" test -e "$RUNDIR"
