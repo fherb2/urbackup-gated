@@ -2,29 +2,9 @@
 
 ## Stand
 
-Alle drei Befunde der ersten Installation sind behoben: die durchdrehende Hauptschleife (`b84dd3b`), die Ruhemessung an der falschen Stelle (`edb8623`) und der irreführende Statustext (`3940618`). `dev` und `claude-workbench` stehen auf demselben Stand und sind gepusht.
+**Version 1.0.0 ist freigegeben.** Die Abnahme von Hand ist in allen acht Punkten bestanden, geprüft am 12. September 2026 auf dem Zielrechner; damit ist auch die zuletzt noch offene Geschwindigkeitsangabe gemessen und bestätigt. Beide automatischen Teststufen laufen vollständig durch, kein Modul ist ungeprüft. Der Code-Review und die Befunde der ersten Installation sind abgearbeitet.
 
-Damit bleibt als offene Arbeit nur noch die Abnahme von Hand. Die Neuinstallation auf dem Zielrechner von `dev` läuft zum Zeitpunkt dieses Eintrags (12. September 2026); erst danach sind die Abnahmepunkte 2 und 5 prüfbar.
-
-## Abnahme von Hand abschließen
-
-Stufe 3, beschrieben in der Implementierungsdoku unter „Stufe 3: Abnahme von Hand". Aus der ersten Installation bereits **bestanden**:
-
-- Installation läuft sauber durch, Symlink landet in `graphical-session.target.wants` — die Bindung an die grafische Sitzung greift.
-- Der Dienst läuft auf `/usr/bin/python3 -u -m urbackup_gated.daemon`.
-- `urbackup-gated-ctl status` und `-h` sind brauchbar, `activate`/`deactivate` wirken.
-- Der Installer stoppt und deaktiviert `urbackupclientbackend` wie vorgesehen.
-- **Punkt 3 (echter Netzwechsel):** Wechsel von `lieluxVPN` auf `lieluX` hat den Client gestartet, Meldung kam, Serververbindung wurde gemeldet.
-
-Aus einer Testsicherung am 12. September 2026, aufgenommen als Bildschirmkopien für die README, kommt dazu:
-
-- **Punkt 8, rechnerischer Teil: bestanden.** Gegen einen echten Client stimmen die Fortschrittszahlen — 6922 bzw. 10255 von 691093 MiB ergeben die angezeigten 1,0 % und 1,5 %. Die Felder `done_bytes` und `total_bytes` werden also richtig gelesen und umgerechnet.
-- **Punkt 1, Schaltflächen: bestanden.** Die Meldung trägt `Details` und `Deactivate`, letzteres passend zum damaligen Nutzer-Zustand.
-- **Punkt 2, Inhalt des Live-Fensters: bestanden.** Das Fenster öffnet sich und zeigt Netzlage, Entscheidung samt Begründung und Client-Zustand vollständig.
-
-**Noch offen:** Punkt 1 (Anzeigedauer und ihr Pausieren unter dem Mauszeiger), Punkt 2 (Überschreiben statt Anwachsen, Unterdrücken der Meldungen), Punkt 4 (Dockingstation), Punkt 5 (Handschalter), Punkt 6 (Fehlerfenster des Fail-safe), Punkt 7 (Abmelden), Punkt 8 (Geschwindigkeitsangabe).
-
-Von Punkt 8 bleibt damit nur noch die **Geschwindigkeitsangabe** offen, und sie ist die einzige inhaltlich offene Annahme des Vorhabens. Bei der Testsicherung standen 0,05 bzw. 0,01 MB/s an, während der Fortschritt zwischen beiden Aufnahmen um 3333 MiB wuchs. Das muss kein Fehler sein: `done_bytes` kann verarbeitete statt übertragener Daten zählen, was bei einer deduplizierenden Vollsicherung den Unterschied erklärt. Zu klären nur durch einen Blick in die rohe JSON-Ausgabe im selben Moment, in dem die Anzeige gelesen wird.
+Die Anwendung ist entsprechend ihrer Dokumentation nutzbar. **Offene Arbeit gibt es nicht mehr** — was unten steht, sind Spuren für den Fall, dass eine Beobachtung wiederkehrt, und eine Entscheidung, die dem Nutzer gehört.
 
 ## Zurückgestellt
 
@@ -47,7 +27,5 @@ Der Zwischenmechanismus ist **nicht** bekannt. Die naheliegende Vermutung trägt
 Wieder aufzunehmen, wenn der Prüfpunkt erneut rot wird.
 
 ## Nicht vergessen
-
-Das Container-Abbild `urbackup-gated-tests` liegt nach den Prüfläufen mit `KEEP_IMAGE=1` noch auf dem Rechner — einige hundert Megabyte. Nach der Abnahme kann es weg: `docker image rm urbackup-gated-tests`.
 
 Zwei echte Netznamen stehen weiterhin im öffentlichen Repository: `lieluX` und `lielux` in der Implementierungsdoku als Begründung für den case-sensitiven Vergleich, `lieluX` in den Testszenarien. Aus der ausgelieferten Konfiguration sind sie entfernt. Ob das genügt, ist eine Entscheidung, keine Aufgabe.
