@@ -132,6 +132,23 @@ class Rendering(support.StubbedCase):
         self.assertIn("1024 of 5120 MiB (20.0 %)", text)
         self.assertIn("2.00 MB/s", text)
 
+    def test_a_deliberately_stopped_client_shows_no_diagnosis(self):
+        # We stopped the unit, so "not reachable (backend not running?)" would
+        # answer a question nobody asked and read like a fault.
+        self.use_scenario("ethernet_only")
+        self.set_client_state(active=False)
+        text = state.format_status(state.gather(self.load_config()))
+        self.assertIn(state.field("status", "-"), text)
+        self.assertNotIn("not reachable", text)
+
+    def test_an_unreachable_backend_is_named_while_the_unit_runs(self):
+        # The unit runs and the backend still says nothing: that is the one
+        # case where the guess is the most valuable line in the output.
+        self.use_scenario("ethernet_only")
+        self.set_client_state(active=True)
+        text = state.format_status(state.gather(self.load_config()))
+        self.assertIn("not reachable", text)
+
     def test_progress_is_omitted_without_a_total(self):
         self.use_scenario("ethernet_only")
         self.set_client_status(

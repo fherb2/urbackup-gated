@@ -161,7 +161,17 @@ def format_status(status: dict) -> str:
         field("service active", _yes_no_unknown(client_view["unit_active"])),
     ]
     if not client_view["raw_available"]:
-        lines.append(field("status", "not reachable (backend not running?)"))
+        # A unit we stopped ourselves cannot answer, and guessing at the reason
+        # would dress our own doing up as a diagnosis. The guess is worth
+        # printing in the other two cases only: if the unit runs and the backend
+        # still says nothing, that is the one genuinely odd thing in the whole
+        # output, and if the unit state could not even be asked, the guess is
+        # the best statement left - a dash there would claim a certainty we do
+        # not have.
+        if client_view["unit_active"] is False:
+            lines.append(field("status", "-"))
+        else:
+            lines.append(field("status", "not reachable (backend not running?)"))
     else:
         lines.append(field("server connected", _yes_no_unknown(client_view["server_connected"])))
         lines.append(field("backup running", _yes_no_unknown(client_view["backup_running"])))
