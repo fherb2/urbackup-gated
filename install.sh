@@ -211,7 +211,7 @@ install -m 0755 -o root -g root \
 record "$BIN_DIR/urbackup-gated-uninstall"
 
 install -d -m 0755 "$DOC_DIR"
-install -m 0644 -o root -g root "$SOURCE_DIR/README.md" "$DOC_DIR/README.md"
+install -m 0644 -o root -g root "$SOURCE_DIR/packaging/doc/README.md" "$DOC_DIR/README.md"
 record "$DOC_DIR"
 
 # -- runtime directory -------------------------------------------------------

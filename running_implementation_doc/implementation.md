@@ -97,12 +97,14 @@ Fünf Orte, jeder mit genau einer Aufgabe:
 | Ort | Aufgabe |
 |---|---|
 | `src/urbackup_gated/` | Das Programm. Es weiß nicht, wohin es installiert wird — wohl aber, wo es zur Laufzeit liest und schreibt. |
-| `packaging/` | Dateien, die unverändert oder mit Platzhalterersetzung an einen festen Ort im System gelangen und nicht Python sind: systemd-Unit, Dispatcher-Hook, `tmpfiles.d`-Schnipsel, `sudoers`-Freigabe, Vorgabekonfiguration. |
+| `packaging/` | Dateien, die unverändert oder mit Platzhalterersetzung an einen festen Ort im System gelangen und nicht Python sind: systemd-Unit, Dispatcher-Hook, `tmpfiles.d`-Schnipsel, `sudoers`-Freigabe, Vorgabekonfiguration, Anwenderdokumentation. |
 | `tests/` | Die Prüfung, Stufe 1 und 2, samt Attrappen und Szenarien. |
 | `running_implementation_doc/` | Diese Dokumentation, Fahrplan und Status. |
 | `install.sh`, `uninstall.sh` in der Wurzel | Der Einstiegspunkt. Sie stehen dort, weil sie das Erste sind, was ein Nutzer nach dem Klonen sucht. |
 
-**Nicht** Aufgabe von `packaging/`: der Installer selbst, Bauvorschriften, Testattrappen, Dokumentation.
+**Nicht** Aufgabe von `packaging/`: der Installer selbst, Bauvorschriften, Testattrappen, **Projekt**dokumentation — also diese Implementierungsdoku und die Projekt-README in der Wurzel.
+
+**Die Anwenderdokumentation gehört dagegen sehr wohl dorthin** (`packaging/doc/README.md`), und zwar nach derselben Definition wie alles andere in diesem Ordner: Sie gelangt unverändert an einen festen Ort im System (`/usr/local/share/doc/urbackup-gated/`). Sie lag bis zum 12. September 2026 in der Wurzel und wurde von dort installiert — ein Paketbestandteil außerhalb des Paketordners. Damit hängt eine zweite Festlegung zusammen: **Projekt-README und Anwenderdokumentation sind zwei Dokumente mit zwei Aufgaben.** Die Projekt-README ist die Eingangsseite — wofür ist das gut, wie sieht es aus, wie bekommt man es, wie ist das Repository gebaut. Die Anwenderdokumentation trägt die Einzelheiten zu Installation, Bedienung und Konfiguration. Keine Aussage steht in beiden; die Eingangsseite verweist auf die andere, statt sie zu wiederholen.
 
 **Zu `src/`:** Das ist hier ein Ordnername und **kein Distributionsversprechen**. Es gibt bewusst keine `pyproject.toml`, weil dies ein in Python geschriebener **Dienst** ist und keine Bibliothek — nichts daran soll je importierbar veröffentlicht werden. Eine Recherche zu vergleichbaren Vorhaben hat ergeben, dass es für Dienst-Projekte **keine etablierte Konvention** gibt: Vier untersuchte Python-Dienste mit Systemintegration benutzen vier verschiedene Layouts, uneinig schon über den Ort des Quellcodes. Was es normativ gibt, sind Paketierungsregeln der Distributionen — die regeln, wie eine Distribution fremde Software verpackt, nicht wie deren Repository aussieht.
 
