@@ -1,4 +1,4 @@
-# 1 Zusammenhänge
+# Zusammenhänge
 
 ## Ausgangslage und Ziel
 
@@ -570,15 +570,9 @@ Was hier steht, ist der Rest, der sich nicht sinnvoll automatisieren lässt: die
 5. **Handschalter.** Deaktivieren über die Schaltfläche und über `urbackup-gated-ctl deactivate`, beides wirkt. Dann im verbotenen Netz aktivieren: Der Client darf **nicht** starten.
 6. **Fail-safe, nur die Anzeige.** Die Konfiguration absichtlich beschädigen und den Dienst neu starten. Erwartet: ein **Fehlerfenster** mit der konkreten Ursache. Dass der Client dabei gestoppt wird, dass der Dienst mit dem vereinbarten Rückgabewert endet und dass er sich nicht in einer Schleife neu startet, prüft Stufe 2 — hier bleibt nur, was ein Auge braucht.
 7. **Abmelden.** Erwartet: Der Client wird beim Beenden der Sitzung gestoppt.
-8. **Erstes echtes Backup.** Die Fortschrittsanzeige gegen die Wirklichkeit prüfen. Das ist die **einzige inhaltlich offene Annahme** der Implementierung: Die genaue JSON-Struktur von `urbackupclientctl status` konnte nicht verifiziert werden, weil das Client-Backend beim Programmieren nicht lief. Der Parser deckt beide plausiblen Formen ab (`running_processes`-Liste oder Felder direkt auf oberster Ebene) und fällt sonst geordnet auf „nicht erreichbar" zurück — aber ob die Zahlen stimmen, zeigt erst der erste Lauf.
+8. **Erstes echtes Backup.** Die Fortschrittsanzeige gegen die Wirklichkeit prüfen. Beim Programmieren war die genaue JSON-Struktur von `urbackupclientctl status` nicht verifizierbar, weil das Client-Backend nicht lief; der Parser deckt deshalb beide plausiblen Formen ab (`running_processes`-Liste oder Felder direkt auf oberster Ebene) und fällt sonst geordnet auf „nicht erreichbar" zurück. Erwartet: Die angezeigten Werte für Menge, Anteil und Geschwindigkeit entsprechen dem, was tatsächlich läuft.
 
-# 2 Vorgaben
-
-_Noch nicht ausgearbeitet._
-
-# 3 Einheiten
-
-_Noch nicht ausgearbeitet._
+**Ergebnis der Abnahme:** alle acht Punkte bestanden, geprüft am 12. September 2026 auf dem Zielrechner. Damit ist auch die letzte inhaltlich offene Annahme des Vorhabens erledigt — die Zahlen aus `urbackupclientctl status` sind gemessen und stimmen.
 
 # Anhang
 
@@ -600,7 +594,7 @@ Geprüft wurde der Stand `5d813c6` auf `claude-workbench` durch eine zweite, unb
 
 ### Bewusst so und nicht anders
 
-**Segment 2 und 3 dieser Doku bleiben unausgearbeitet.** Nach der allgemeinen Methodik entstünde Segment 3 vor der Implementierung. Für ein Vorhaben dieser Größe wurde am 9. September ausdrücklich entschieden, die Doku nach Segment 1 einzufrieren und daraus heraus zu implementieren. Das ist eine Abweichung mit Ansage, keine Lücke.
+**Diese Doku besteht aus den Zusammenhängen und diesem Anhang, sonst nichts.** Nach der allgemeinen Methodik käme eine dreiteilige Segmentstruktur, und Segment 3 entstünde vor der Implementierung. Für ein Vorhaben dieser Größe wurde am 9. September ausdrücklich entschieden, die Doku nach Segment 1 einzufrieren und daraus heraus zu implementieren; die beiden leeren Segmentüberschriften sind mit der Freigabe von 1.0.0 entfernt worden, weil sie nichts als eine unerfüllte Erwartung trugen. Das ist eine Abweichung mit Ansage, keine Lücke.
 
 **Die Dockingstation-Strenge** — Ethernet und ein fremdes WLAN gleichzeitig, und es wird nicht gesichert — ist der ausdrücklich benannte Preis der Entscheidungsregeln, nicht deren Fehler. Siehe „Preis dieser Entscheidung, ausdrücklich benannt".
 
