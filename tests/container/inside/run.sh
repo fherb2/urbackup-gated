@@ -10,7 +10,9 @@ SOURCE=/src
 TESTDIR=/run/urbackup-gated-test
 RUNDIR=/run/urbackup-gated
 CLIENT_UNIT=urbackupclientbackend.service
-USER_UNIT=/etc/systemd/user/urbackup-gated.service
+USER_UNIT=/usr/local/lib/systemd/user/urbackup-gated.service
+MANIFEST=/usr/local/lib/urbackup-gated/manifest
+DOC_FILE=/usr/local/share/doc/urbackup-gated/README.md
 DISPATCHER=/etc/NetworkManager/dispatcher.d/90-urbackup-gated
 SERVICE_USER=tester
 
@@ -107,6 +109,27 @@ check "default configuration installed" test -f /etc/urbackup-gated.conf
 check "user unit installed" test -f "$USER_UNIT"
 check "dispatcher installed" test -x /etc/NetworkManager/dispatcher.d/90-urbackup-gated
 check "tmpfiles snippet installed" test -f /etc/tmpfiles.d/urbackup-gated.conf
+
+# The clone is meant to be disposable after the installation, so the way back
+# and the documentation have to be in the system, not only in the working copy.
+check "uninstaller is installed as a command" test -x /usr/local/bin/urbackup-gated-uninstall
+check "documentation is installed" test -f "$DOC_FILE"
+check "manifest was written" test -f "$MANIFEST"
+grep -qx "user $SERVICE_USER" "$MANIFEST" \
+    && ok "manifest names the service user" \
+    || no "manifest names the service user"
+missing=
+for path in /usr/local/lib/urbackup-gated /usr/local/bin/urbackup-gated \
+            /usr/local/bin/urbackup-gated-ctl /usr/local/bin/urbackup-gated-uninstall \
+            /etc/sudoers.d/urbackup-gated /etc/tmpfiles.d/urbackup-gated.conf \
+            "$DISPATCHER" "$USER_UNIT"; do
+    grep -qx "remove $path" "$MANIFEST" || missing="$missing $path"
+done
+[ -z "$missing" ] \
+    && ok "manifest records every installed path" \
+    || no "manifest records every installed path -$missing"
+check_not "the configuration is not in the manifest" \
+    grep -q "remove /etc/urbackup-gated.conf" "$MANIFEST"
 
 [ "$(stat -c '%a %U:%G' /etc/sudoers.d/urbackup-gated)" = "440 root:root" ] \
     && ok "sudoers drop-in is 0440 root:root" \
@@ -256,10 +279,14 @@ check "everything to be removed is there beforehand" \
     test -e "$DISPATCHER" -a -e "$USER_UNIT" -a -e /etc/sudoers.d/urbackup-gated \
         -a -e /etc/tmpfiles.d/urbackup-gated.conf -a -e /usr/local/lib/urbackup-gated
 
-check "uninstall.sh succeeds" "$SOURCE/uninstall.sh" "$SERVICE_USER"
+# Run the installed copy, not the one in the working copy: that is the way a
+# user has after throwing the clone away, and it removes itself in the process.
+check "the installed uninstaller succeeds" /usr/local/bin/urbackup-gated-uninstall
 check_not "wrapper removed" test -e /usr/local/bin/urbackup-gated
 check_not "control tool removed" test -e /usr/local/bin/urbackup-gated-ctl
+check_not "uninstaller removed itself" test -e /usr/local/bin/urbackup-gated-uninstall
 check_not "package removed" test -e /usr/local/lib/urbackup-gated
+check_not "documentation removed" test -e /usr/local/share/doc/urbackup-gated
 check_not "sudoers drop-in removed" test -e /etc/sudoers.d/urbackup-gated
 check_not "dispatcher removed" test -e "$DISPATCHER"
 check_not "tmpfiles snippet removed" test -e /etc/tmpfiles.d/urbackup-gated.conf

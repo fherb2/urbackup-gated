@@ -43,6 +43,8 @@ runs even though it would be safe. Switch the wifi off in that case.
 ## Installation
 
 ```
+git clone https://github.com/fherb2/urbackup-gated.git
+cd urbackup-gated
 sudo ./install.sh
 ```
 
@@ -50,6 +52,10 @@ This installs for the user who invoked `sudo`; pass a user name to override it.
 If `yad` or `notify-send` is missing, the installer names the package and asks
 before installing it; declining stops the installation before anything has been
 written. Pass `--yes` to answer that question in advance, for unattended runs.
+
+**The clone is not needed afterwards.** Everything is copied, nothing is linked,
+and that includes the uninstaller and this document. You may delete the working
+copy once the installation has finished.
 
 Then review the allow list in `/etc/urbackup-gated.conf`, which is the one
 setting you have to get right:
@@ -67,11 +73,31 @@ systemctl --user restart urbackup-gated
 To remove everything again:
 
 ```
-sudo ./uninstall.sh
+sudo urbackup-gated-uninstall
 ```
 
-The uninstaller re-enables `urbackupclientbackend.service`, since nothing would
-be gating it any more.
+That command is installed along with the service, so it works whether or not you
+still have the working copy; running `sudo ./uninstall.sh` from a clone does the
+same thing. The uninstaller re-enables `urbackupclientbackend.service`, since
+nothing would be gating it any more, and keeps `/etc/urbackup-gated.conf` -
+delete that by hand if you want it gone.
+
+## Where everything lives
+
+| What | Where |
+|---|---|
+| Configuration | `/etc/urbackup-gated.conf` |
+| This document | `/usr/local/share/doc/urbackup-gated/README.md` |
+| Commands | `/usr/local/bin/urbackup-gated-ctl`, `urbackup-gated-uninstall` |
+| Service and program | `/usr/local/bin/urbackup-gated`, `/usr/local/lib/urbackup-gated/` |
+| systemd user unit | `/usr/local/lib/systemd/user/urbackup-gated.service` |
+| Privilege grant | `/etc/sudoers.d/urbackup-gated` |
+| Network hook | `/etc/NetworkManager/dispatcher.d/90-urbackup-gated` |
+| Runtime state | `/run/urbackup-gated/` - gone after every reboot, by design |
+
+The installer records what it put down in
+`/usr/local/lib/urbackup-gated/manifest`, and the uninstaller removes exactly
+that. Source: <https://github.com/fherb2/urbackup-gated>
 
 ## Usage
 
@@ -99,8 +125,12 @@ systemctl --user status urbackup-gated
 A missing, unreadable or invalid configuration file keeps the client stopped and
 raises an error dialog naming the cause. A missed backup is harmless; an
 unchecked backup over a metered connection is the very thing this service
-exists to prevent. The service does not restart itself in that state - fix the
-file and start it again.
+exists to prevent. The service does not restart itself in that state; fix
+`/etc/urbackup-gated.conf` and start it again:
+
+```
+systemctl --user start urbackup-gated
+```
 
 ## Privileges
 

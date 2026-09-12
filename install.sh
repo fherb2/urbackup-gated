@@ -12,12 +12,16 @@ set -euo pipefail
 
 LIB_DIR=/usr/local/lib/urbackup-gated
 BIN_DIR=/usr/local/bin
+DOC_DIR=/usr/local/share/doc/urbackup-gated
 CONFIG_FILE=/etc/urbackup-gated.conf
-UNIT_DIR=/etc/systemd/user
+# Not /etc/systemd/user: that is the administrator's place for overrides, while
+# this is shipped along with the software, which lives under /usr/local.
+UNIT_DIR=/usr/local/lib/systemd/user
 UNIT_FILE="$UNIT_DIR/urbackup-gated.service"
 DISPATCHER_FILE=/etc/NetworkManager/dispatcher.d/90-urbackup-gated
 TMPFILES_FILE=/etc/tmpfiles.d/urbackup-gated.conf
 SUDOERS_FILE=/etc/sudoers.d/urbackup-gated
+MANIFEST="$LIB_DIR/manifest"
 CLIENT_UNIT=urbackupclientbackend.service
 
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -103,10 +107,27 @@ systemctl cat "$CLIENT_UNIT" >/dev/null 2>&1 \
 ensure_package yad yad
 ensure_package notify-send libnotify-bin
 
+# -- manifest ----------------------------------------------------------------
+# Everything this script puts down is recorded here, and uninstall.sh works from
+# that record alone. Without it both scripts would carry the same list of paths,
+# and a path added to only one of them would silently leave a file behind.
+#
+# Deliberately absent from the record: the configuration file. It is meant to
+# survive the uninstall, so it is nothing to be removed.
+
+record() {
+    printf 'remove %s\n' "$1" >>"$MANIFEST"
+}
+
 # -- python package ----------------------------------------------------------
 
 rm -rf "$LIB_DIR/urbackup_gated"
 install -d -m 0755 "$LIB_DIR"
+
+: >"$MANIFEST"
+chmod 0644 "$MANIFEST"
+printf 'user %s\n' "$SERVICE_USER" >>"$MANIFEST"
+record "$LIB_DIR"
 cp -r "$SOURCE_DIR/src/urbackup_gated" "$LIB_DIR/"
 find "$LIB_DIR/urbackup_gated" -type d -exec chmod 0755 {} +
 find "$LIB_DIR/urbackup_gated" -type f -exec chmod 0644 {} +
@@ -125,6 +146,21 @@ EOF
 
 write_wrapper "$BIN_DIR/urbackup-gated" urbackup_gated.daemon
 write_wrapper "$BIN_DIR/urbackup-gated-ctl" urbackup_gated.cli
+record "$BIN_DIR/urbackup-gated"
+record "$BIN_DIR/urbackup-gated-ctl"
+
+# -- uninstaller and documentation -------------------------------------------
+# Both used to live in the clone only. Since everything else is copied, throwing
+# the clone away afterwards is the obvious thing to do - and left the user with
+# no way back and no documentation.
+
+install -m 0755 -o root -g root \
+    "$SOURCE_DIR/uninstall.sh" "$BIN_DIR/urbackup-gated-uninstall"
+record "$BIN_DIR/urbackup-gated-uninstall"
+
+install -d -m 0755 "$DOC_DIR"
+install -m 0644 -o root -g root "$SOURCE_DIR/README.md" "$DOC_DIR/README.md"
+record "$DOC_DIR"
 
 # -- runtime directory -------------------------------------------------------
 
@@ -132,6 +168,7 @@ sed -e "s/@USER@/$SERVICE_USER/" -e "s/@GROUP@/$SERVICE_GROUP/" \
     "$SOURCE_DIR/packaging/tmpfiles.d/urbackup-gated.conf" >"$TMPFILES_FILE"
 chmod 0644 "$TMPFILES_FILE"
 systemd-tmpfiles --create "$TMPFILES_FILE"
+record "$TMPFILES_FILE"
 
 # -- privileges --------------------------------------------------------------
 # Written to a temporary file and checked first: a broken sudoers file locks
@@ -143,11 +180,13 @@ sed -e "s/@USER@/$SERVICE_USER/" \
     "$SOURCE_DIR/packaging/sudoers.d/urbackup-gated" >"$sudoers_tmp"
 visudo -c -q -f "$sudoers_tmp" || die "generated sudoers file is invalid - nothing installed"
 install -m 0440 -o root -g root "$sudoers_tmp" "$SUDOERS_FILE"
+record "$SUDOERS_FILE"
 
 # -- network events ----------------------------------------------------------
 
 install -m 0755 -o root -g root \
     "$SOURCE_DIR/packaging/networkmanager/90-urbackup-gated" "$DISPATCHER_FILE"
+record "$DISPATCHER_FILE"
 
 # -- configuration -----------------------------------------------------------
 
@@ -164,6 +203,7 @@ fi
 install -d -m 0755 "$UNIT_DIR"
 install -m 0644 -o root -g root \
     "$SOURCE_DIR/packaging/systemd/urbackup-gated.service" "$UNIT_FILE"
+record "$UNIT_FILE"
 
 # The UrBackup client must not come up with root privileges before anyone logs
 # in; urbackup-gated is from now on the only thing that starts it.

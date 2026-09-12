@@ -74,6 +74,54 @@ zu sein, prüft und erzwingt `urbackup-gated` bei **jedem eigenen Start** erneut
 Ersteinrichtung. Damit repariert sich der Zustand spätestens bei der nächsten
 Anmeldung nach einer Neuinstallation von selbst.
 
+## Installation und Deinstallation
+
+### Ordnerstruktur des Repositorys
+
+Fünf Orte, jeder mit genau einer Aufgabe:
+
+| Ort | Aufgabe |
+|---|---|
+| `src/urbackup_gated/` | Das Programm. Es weiß nicht, wohin es installiert wird — wohl aber, wo es zur Laufzeit liest und schreibt. |
+| `packaging/` | Dateien, die unverändert oder mit Platzhalterersetzung an einen festen Ort im System gelangen und nicht Python sind: systemd-Unit, Dispatcher-Hook, `tmpfiles.d`-Schnipsel, `sudoers`-Freigabe, Vorgabekonfiguration. |
+| `tests/` | Die Prüfung, Stufe 1 und 2, samt Attrappen und Szenarien. |
+| `running_implementation_doc/` | Diese Dokumentation, Fahrplan und Status. |
+| `install.sh`, `uninstall.sh` in der Wurzel | Der Einstiegspunkt. Sie stehen dort, weil sie das Erste sind, was ein Nutzer nach dem Klonen sucht. |
+
+**Nicht** Aufgabe von `packaging/`: der Installer selbst, Bauvorschriften, Testattrappen, Dokumentation.
+
+**Zu `src/`:** Das ist hier ein Ordnername und **kein Distributionsversprechen**. Es gibt bewusst keine `pyproject.toml`, weil dies ein in Python geschriebener **Dienst** ist und keine Bibliothek — nichts daran soll je importierbar veröffentlicht werden. Eine Recherche zu vergleichbaren Vorhaben hat ergeben, dass es für Dienst-Projekte **keine etablierte Konvention** gibt: Vier untersuchte Python-Dienste mit Systemintegration benutzen vier verschiedene Layouts, uneinig schon über den Ort des Quellcodes. Was es normativ gibt, sind Paketierungsregeln der Distributionen — die regeln, wie eine Distribution fremde Software verpackt, nicht wie deren Repository aussieht.
+
+### Die Ableitungsregel
+
+**Jede Datei unter `packaging/` hat genau ein Ziel im System.** `install.sh` ist die einzige Stelle, die diese Zuordnung kennt. Sie wird nicht ein zweites Mal aufgeschrieben — auch nicht in `uninstall.sh`, was bis zuletzt der Fall war: Zwei Listen derselben Pfade bedeuten, dass ein neu hinzugekommener Pfad irgendwann nur in einer von beiden steht, und die Deinstallation dann still eine Datei zurücklässt.
+
+Stattdessen schreibt `install.sh` ein **Manifest** dessen, was es abgelegt hat, und `uninstall.sh` arbeitet ausschließlich daraus. Im Manifest steht außerdem der Dienstnutzer, damit die Deinstallation ihn nicht raten muss — wer entfernt, muss nicht derselbe sein, für den installiert wurde. Fehlt das Manifest, bricht `uninstall.sh` ab und sagt warum; ein Rückfall auf eine eingebaute Liste wäre genau die Doppelpflege, die hier beseitigt werden soll.
+
+Nicht im Manifest steht die **Konfigurationsdatei**: Sie soll die Deinstallation überleben, ist also nichts zu Entfernendes. Ebenso wenig das Wiederaktivieren des Client-Dienstes — das ist eine Handlung, keine Datei (siehe „Die Rücknahme gehört zur Festlegung" weiter oben).
+
+### Der Installationsweg
+
+Repository klonen, `install.sh` als root ausführen, fertig. **Der Klon ist danach entbehrlich** — es wird alles kopiert, nichts verlinkt. Genau deshalb gehören auch der Deinstaller und die Anwenderdokumentation ins System: Wer den Klon wegwirft, was nach dem übrigen Entwurf naheliegt, stünde sonst ohne Weg zurück und ohne Dokumentation da.
+
+| Was | Wohin |
+|---|---|
+| Python-Paket | `/usr/local/lib/urbackup-gated/urbackup_gated/` |
+| Manifest | `/usr/local/lib/urbackup-gated/manifest` |
+| Dienst und Kommandowerkzeug | `/usr/local/bin/urbackup-gated`, `…-ctl` |
+| Deinstaller | `/usr/local/bin/urbackup-gated-uninstall` |
+| Anwenderdokumentation | `/usr/local/share/doc/urbackup-gated/` |
+| systemd-User-Unit | `/usr/local/lib/systemd/user/` |
+| `tmpfiles.d`-Schnipsel, `sudoers`-Freigabe, Dispatcher-Hook, Konfiguration | an ihren jeweiligen Systemorten unter `/etc` |
+
+**Warum die Unit unter `/usr/local/lib/systemd/user` und nicht unter `/etc/systemd/user`:** `/etc/systemd/…` ist der Ort für Anpassungen des Administrators; mitgelieferte Units gehören nicht dorthin. Da die Software unter `/usr/local` liegt, ist `/usr/local/lib/systemd/user` der passende Ort — am System als Suchpfad nachgewiesen.
+
+Dass dies eine Installation für **genau einen Nutzer** ist, steht mit Begründung unter „Benannte Nebenwirkung" im Kapitel „Zustand, Merken zwischen Aufrufen und Statusabfrage".
+
+### Die Konfigurationsdatei trägt eine Kurzanleitung
+
+Ihr Kommentarkopf nennt in wenigen Zeilen, was der Dienst tut, wo die vollständige Dokumentation liegt, wie man ihn wieder los wird und was dabei mit dem UrBackup-Dienst geschieht. Grund: Sie ist das Einzige, was der Nutzer nach Monaten sicher wiederfindet — sie liegt an einem festen Ort, und er hat sie selbst bearbeitet.
+
 ## Entscheidungsregeln
 
 Bewertet werden **alle gleichzeitig aktiven physischen Verbindungen**, nicht nur eine ausgewählte:
