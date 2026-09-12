@@ -103,13 +103,18 @@ class Daemon:
             self._refresh_window(status)
             self._report(status, action)
 
-            interval = (
-                self._config.check_seconds_window_open
-                if self._window is not None
-                else self._config.check_seconds
-            )
-            self._wake.wait(interval)
+            self._wake.wait(self._interval())
             self._wake.clear()
+
+    def _interval(self) -> int:
+        """How long to wait before looking again.
+
+        While the status window is open this has to be short - it is a live
+        display, and half a minute between updates would make it useless.
+        """
+        if self._window is not None:
+            return self._config.check_seconds_window_open
+        return self._config.check_seconds
 
     def _enforce_disabled(self) -> None:
         """Undo the unconditional systemctl enable of the UrBackup installer."""

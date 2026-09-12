@@ -15,7 +15,7 @@ import support
 
 support.ensure_watchdog()
 
-from urbackup_gated import daemon, state, ui  # noqa: E402
+from urbackup_gated import daemon, runtime, state, ui  # noqa: E402
 
 
 class ReportingCase(support.StubbedCase):
@@ -54,11 +54,13 @@ class ReportingCase(support.StubbedCase):
             (self.scenario_dir / "client_status.json").unlink(missing_ok=True)
 
     def tick(self) -> str | None:
-        """One pass of the main loop: gather, act, report."""
+        """One pass of the main loop, everything but the waiting."""
         status = state.gather(self.config)
         action = self.daemon._apply(status)
         if action is not None:
             status["urbackup_client"]["unit_active"] = action == "started"
+        runtime.write_state(status)
+        self.daemon._refresh_window(status)
         self.daemon._report(status, action)
         for thread in threading.enumerate():
             if thread is not threading.current_thread():
@@ -315,6 +317,88 @@ class UnknownUnitState(ReportingCase):
         status["urbackup_client"]["unit_active"] = None
         self.assertIsNone(self.daemon._apply(status))
         self.assertFalse(self.client_is_active())
+
+
+class _FakeWindow:
+    """Stands in for the yad window: remembers what it was shown."""
+
+    def __init__(self, alive: bool = True) -> None:
+        self.texts: list[str] = []
+        self.alive = alive
+        self.closed_by_daemon = False
+
+    def update(self, text: str) -> bool:
+        self.texts.append(text)
+        return self.alive
+
+    def close(self) -> None:
+        self.closed_by_daemon = True
+
+
+class StatusWindowHandling(ReportingCase):
+    """Opening, refreshing and closing, and what it does to the messages."""
+
+    def test_the_details_button_opens_exactly_one_window(self):
+        opened = []
+        self.patch(ui, "StatusWindow", lambda: opened.append(_FakeWindow()) or opened[-1])
+        self.daemon._requests.put(ui.ACTION_DETAILS)
+        self.daemon._requests.put(ui.ACTION_DETAILS)
+        self.daemon._drain_requests()
+        self.assertEqual(len(opened), 1)
+
+    def test_a_window_that_cannot_open_is_reported_and_not_remembered(self):
+        def refuse():
+            raise OSError("no display")
+
+        self.patch(ui, "StatusWindow", refuse)
+        self.daemon._requests.put(ui.ACTION_DETAILS)
+        with contextlib.redirect_stderr(io.StringIO()) as captured:
+            self.daemon._drain_requests()
+        self.assertIn("no display", captured.getvalue())
+        self.assertIsNone(self.daemon._window)
+
+    def test_an_open_window_shortens_the_check_interval(self):
+        # 30 seconds would make the window useless as a live display.
+        self.assertEqual(self.daemon._interval(), self.config.check_seconds)
+        self.daemon._window = _FakeWindow()
+        self.assertEqual(self.daemon._interval(), self.config.check_seconds_window_open)
+
+    def test_an_open_window_suppresses_the_messages(self):
+        self.backend(True)
+        self.tick()
+        self.notifications.clear()
+
+        self.daemon._window = _FakeWindow()
+        self.set_client_status({"internet_connected": False, "servers": []})
+        self.tick()
+        self.assertEqual(self.summaries(), [], "messages repeat what is on screen")
+
+    def test_the_window_receives_the_same_text_the_tool_shows(self):
+        window = _FakeWindow()
+        self.daemon._window = window
+        self.backend(True)
+        self.tick()
+        self.assertEqual(len(window.texts), 1)
+        self.assertIn("urbackup-gated - status of", window.texts[0])
+
+    def test_a_closed_window_is_dropped(self):
+        # Noticed by the write failing, so no back channel is needed.
+        window = _FakeWindow(alive=False)
+        self.daemon._window = window
+        self.backend(True)
+        self.tick()
+        self.assertIsNone(self.daemon._window)
+        self.assertTrue(window.closed_by_daemon)
+
+    def test_messages_return_once_the_window_is_gone(self):
+        self.backend(True)
+        self.daemon._window = _FakeWindow(alive=False)
+        self.tick()
+        self.notifications.clear()
+
+        self.set_client_status({"internet_connected": False, "servers": []})
+        self.tick()
+        self.assertEqual(len(self.notifications), 1)
 
 
 class KnownChange(unittest.TestCase):
