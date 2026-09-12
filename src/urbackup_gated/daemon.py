@@ -56,7 +56,9 @@ class Daemon:
     # -- lifecycle ---------------------------------------------------------
 
     def run(self) -> int:
-        runtime.check_directory()
+        # The runtime directory is checked in main(), where the failure becomes
+        # a sentence instead of a traceback. A second check here could only find
+        # what the first already found.
         if not ui.yad_available():
             print(
                 "yad is not installed - neither the status window nor error "
