@@ -18,13 +18,31 @@ from .config import Config, ConfigError, load
 EX_CONFIG = 78
 
 
+# The event types that mean a watched file has changed. Watchdog also reports
+# plain opening, and newer versions report closing after a read as well; both
+# are what every pass through the loop does to the command file. These are
+# watchdog's own event_type values rather than its EVENT_TYPE_* names: the
+# values are the interface, the names are aliases for them, and comparing
+# values keeps the daemon's import list independent of the watchdog version.
+_CHANGE_EVENTS = frozenset({"created", "modified", "moved", "deleted", "closed"})
+
+
 class _TriggerHandler(FileSystemEventHandler):
-    """Wakes the main loop when one of the two trigger files changes."""
+    """Wakes the main loop when one of the two trigger files changes.
+
+    Two filters, and neither is optional. The event type decides what counts as
+    a change - opening a file is not one, and the daemon opens the command file
+    on every pass, so without this filter it wakes itself and spins. The name
+    decides which files matter at all - the daemon writes its state into the
+    same directory. The cheap and far more frequent test comes first.
+    """
 
     def __init__(self, wake: threading.Event) -> None:
         self._wake = wake
 
     def on_any_event(self, event) -> None:
+        if event.event_type not in _CHANGE_EVENTS:
+            return
         paths = (event.src_path, getattr(event, "dest_path", "") or "")
         if any(os.path.basename(path) in runtime.WATCHED_NAMES for path in paths):
             self._wake.set()

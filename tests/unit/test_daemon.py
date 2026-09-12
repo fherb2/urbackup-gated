@@ -9,6 +9,7 @@ import contextlib
 import io
 import threading
 import time
+import types
 import unittest
 
 import support
@@ -417,6 +418,44 @@ class KnownChange(unittest.TestCase):
         for (previous, current), expected in cases.items():
             with self.subTest(previous=previous, current=current):
                 self.assertIs(daemon._known_change(previous, current), expected)
+
+
+class TriggerFilter(unittest.TestCase):
+    """Which file system events wake the main loop, and which must not.
+
+    Reading the command file is part of every pass through the loop, and inotify
+    reports that read as an event on a watched name. A filter that asks for the
+    name alone therefore wakes the loop it has just left. Measured on the target
+    machine before the event type was taken into account: 49 status writes in
+    two seconds instead of one every 30, and half a core of load for as long as
+    the file existed.
+    """
+
+    def woken_by(self, event_type: str, name: str) -> bool:
+        wake = threading.Event()
+        handler = daemon._TriggerHandler(wake)
+        handler.on_any_event(
+            types.SimpleNamespace(
+                event_type=event_type,
+                src_path=str(runtime.RUNTIME_DIR / name),
+                dest_path="",
+            )
+        )
+        return wake.is_set()
+
+    def test_reading_the_command_file_does_not_wake_the_loop(self):
+        self.assertFalse(self.woken_by("opened", runtime.USER_ENABLED_FILE.name))
+
+    def test_replacing_the_command_file_wakes_the_loop(self):
+        # set_user_enabled writes atomically, so the kernel reports the rename
+        # and watchdog turns that into "created" - never into "modified".
+        self.assertTrue(self.woken_by("created", runtime.USER_ENABLED_FILE.name))
+
+    def test_touching_the_network_file_wakes_the_loop(self):
+        self.assertTrue(self.woken_by("modified", runtime.NETWORK_EVENT_FILE.name))
+
+    def test_the_daemons_own_status_writes_do_not_wake_the_loop(self):
+        self.assertFalse(self.woken_by("created", runtime.STATE_FILE.name))
 
 
 if __name__ == "__main__":
