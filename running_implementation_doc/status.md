@@ -52,3 +52,10 @@ Abgearbeitete Fahrplaneinträge, chronologisch. Begründungen stehen nicht hier,
 - Bildschirmkopien einer echten Testsicherung ersetzen die Aufnahmen ohne Fortschrittszahlen; vier ungenutzte Bilder entfernt.
 - Konfigurationsdatei: Der Neustart-Befehl ist abgesetzt statt inline und trägt den Hinweis, dass er ohne `sudo` laufen muss.
 - Abnahmepunkte 1 und 2 teilweise sowie der rechnerische Teil von Punkt 8 aus den Aufnahmen belegt.
+
+## Freigabe 1.0.0
+
+- Abnahme von Hand in allen acht Punkten bestanden; die Geschwindigkeitsangabe ist gemessen und bestätigt. Der Fahrplan führt die Punkte nicht mehr einzeln, weil nichts mehr offen ist.
+- Die beiden leeren Segmentüberschriften der Implementierungsdoku entfernt; die Doku besteht aus den Zusammenhängen und dem Anhang, die Begründung steht im Anhang.
+- Version auf 1.0.0 gesetzt und als `v1.0.0` auf den Übernahme-Commit in `main` getaggt.
+- `claude-workbench` frisch von `dev` abgeleitet.
