@@ -59,3 +59,8 @@ Abgearbeitete Fahrplaneinträge, chronologisch. Begründungen stehen nicht hier,
 - Die beiden leeren Segmentüberschriften der Implementierungsdoku entfernt; die Doku besteht aus den Zusammenhängen und dem Anhang, die Begründung steht im Anhang.
 - Version auf 1.0.0 gesetzt und als `v1.0.0` auf den Übernahme-Commit in `main` getaggt.
 - `claude-workbench` frisch von `dev` abgeleitet.
+
+## Nachtrag zur Projektseite
+
+- Die Wurzel-README behauptete nach dem Installationsblock, das sei die ganze Installation. Das war falsch: Die ausgelieferte Konfiguration trägt Platzhalter als Netznamen, ohne den fehlenden Schritt verbietet der Dienst die Sicherung über jedes WLAN. Der Schritt samt Neustart-Befehl steht jetzt dort; die Anwenderdokumentation im Paketordner hatte ihn bereits.
+- Der Tag `v1.0.0` wurde auf diesen Nachtrag umgesetzt, damit die erste veröffentlichte Version keine falsche Anleitung trägt.
