@@ -4,22 +4,6 @@ Diese Datei ergänzt die globale `~/.claude/CLAUDE.md` und überschreibt sie dor
 wo sie ihr widerspricht. Sie enthält **ausschließlich** Abweichendes und
 Zusätzliches — keine Kopie der allgemeinen Regeln.
 
-## Git: Merge-Modell und Arbeitsort
-
-**Übernahme in den Hauptpfad als echter Merge, nicht als Squash.** Abweichend
-von 1.7 der globalen Datei. Grund: In diesem Projekt wird die eigentliche
-Entwicklungsarbeit auf der Werkbank geleistet — dort steckt die Historie, die
-nachvollziehbar bleiben soll. Ein Squash würde genau sie einebnen. Verwendet
-wird `git merge --no-ff`, damit die Nahtstelle im Graphen sichtbar bleibt.
-
-**Auf dem Hauptpfad darf gearbeitet werden.** Ebenfalls abweichend von 1.7.
-Grund: An diesem Repository arbeitet niemand gleichzeitig; die Trennung, die
-1.7 schützen soll, ist hier gegenstandslos. Checkpoint-Commits direkt auf `dev`
-sind in Ordnung — die Werkbank bleibt trotzdem der übliche Arbeitsort, weil die
-Historie dadurch sauberer liest.
-
-**Hauptpfad ist `dev`**, Werkbank ist `claude-workbench`.
-
 ## Schritte, Commits und Freigaben
 
 **Ein Schritt ist die Einheit der Freigabe: ein Plan, eine Zustimmung.**
