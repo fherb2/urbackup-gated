@@ -1,0 +1,7 @@
+{
+  "integration_branch": "dev",
+  "release_branch": "main",
+  "release_transfer": "merge",
+  "management_branch": null,
+  "management_files": []
+}

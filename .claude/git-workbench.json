@@ -1,0 +1,5 @@
+{
+  "mode": "direct",
+  "workbench_prefix": "claude-wb/",
+  "worktree_dir": ".claude/worktrees"
+}
